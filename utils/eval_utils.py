@@ -10,7 +10,7 @@ def trans_vg_eval_val(pred_boxes, gt_boxes):
     pred_boxes = torch.clamp(pred_boxes, 0, 1)
     gt_boxes = xywh2xyxy(gt_boxes)
     iou = bbox_iou(pred_boxes, gt_boxes)
-    accu = torch.sum(iou > 0.5) / float(batch_size)
+    accu = torch.sum(iou >= 0.5) / float(batch_size)
 
     return iou, accu
 
