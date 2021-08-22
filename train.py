@@ -32,8 +32,8 @@ def get_args_parser():
     parser.add_argument('--clip_max_norm', default=0., type=float,
                         help='gradient clipping max norm')
     parser.add_argument('--eval', dest='eval', default=False, action='store_true', help='if evaluation only')
-    parser.add_argument('--optimizer', default='rmsprop', type=str)
-    parser.add_argument('--lr_scheduler', default='poly', type=str)
+    parser.add_argument('--optimizer', default='adamw', type=str)
+    parser.add_argument('--lr_scheduler', default='step', type=str)
     parser.add_argument('--lr_drop', default=80, type=int)
     
     # Augmentation options
