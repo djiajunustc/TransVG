@@ -27,14 +27,14 @@ def get_args_parser():
     parser.add_argument('--lr_visu_tra', default=1e-5, type=float)
     parser.add_argument('--batch_size', default=8, type=int)
     parser.add_argument('--weight_decay', default=1e-4, type=float)
-    parser.add_argument('--epochs', default=120, type=int)
+    parser.add_argument('--epochs', default=90, type=int)
     parser.add_argument('--lr_power', default=0.9, type=float, help='lr poly power')
     parser.add_argument('--clip_max_norm', default=0., type=float,
                         help='gradient clipping max norm')
     parser.add_argument('--eval', dest='eval', default=False, action='store_true', help='if evaluation only')
     parser.add_argument('--optimizer', default='adamw', type=str)
     parser.add_argument('--lr_scheduler', default='step', type=str)
-    parser.add_argument('--lr_drop', default=80, type=int)
+    parser.add_argument('--lr_drop', default=60, type=int)
     
     # Augmentation options
     parser.add_argument('--aug_blur', action='store_true',
