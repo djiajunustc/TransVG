@@ -64,7 +64,7 @@ def get_args_parser():
     # * Transformer
     parser.add_argument('--enc_layers', default=6, type=int,
                         help="Number of encoding layers in the transformer")
-    parser.add_argument('--dec_layers', default=6, type=int,
+    parser.add_argument('--dec_layers', default=0, type=int,
                         help="Number of decoding layers in the transformer")
     parser.add_argument('--dim_feedforward', default=2048, type=int,
                         help="Intermediate size of the feedforward layers in the transformer blocks")

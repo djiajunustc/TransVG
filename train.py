@@ -22,8 +22,8 @@ from engine import train_one_epoch, validate
 def get_args_parser():
     parser = argparse.ArgumentParser('Set transformer detector', add_help=False)
     parser.add_argument('--lr', default=1e-4, type=float)
-    parser.add_argument('--lr_bert', default=0., type=float)
-    parser.add_argument('--lr_visu_cnn', default=0., type=float)
+    parser.add_argument('--lr_bert', default=1e-5, type=float)
+    parser.add_argument('--lr_visu_cnn', default=1e-5, type=float)
     parser.add_argument('--lr_visu_tra', default=1e-5, type=float)
     parser.add_argument('--batch_size', default=8, type=int)
     parser.add_argument('--weight_decay', default=1e-4, type=float)
@@ -60,7 +60,7 @@ def get_args_parser():
     # * Transformer
     parser.add_argument('--enc_layers', default=6, type=int,
                         help="Number of encoding layers in the transformer")
-    parser.add_argument('--dec_layers', default=6, type=int,
+    parser.add_argument('--dec_layers', default=0, type=int,
                         help="Number of decoding layers in the transformer")
     parser.add_argument('--dim_feedforward', default=2048, type=int,
                         help="Intermediate size of the feedforward layers in the transformer blocks")
@@ -100,7 +100,7 @@ def get_args_parser():
     parser.add_argument('--split_root', type=str, default='data',
                         help='location of pre-parsed dataset info')
     parser.add_argument('--dataset', default='referit', type=str,
-                        help='referit/flickr/unc/unc+/gref')
+                        help='referit/unc/unc+/gref/gref_umd')
     parser.add_argument('--max_query_len', default=20, type=int,
                         help='maximum time steps (lang length) per batch')
     
@@ -259,7 +259,7 @@ def main(args):
                 checkpoint_paths.append(output_dir / f'checkpoint{epoch:04}.pth')
             if val_stats['accu'] > best_accu:
                 checkpoint_paths.append(output_dir / 'best_checkpoint.pth')
-                best_accu = val_stats['accu']
+                best_acc = val_stats['accu']
             
             for checkpoint_path in checkpoint_paths:
                 utils.save_on_master({
