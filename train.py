@@ -259,7 +259,7 @@ def main(args):
                 checkpoint_paths.append(output_dir / f'checkpoint{epoch:04}.pth')
             if val_stats['accu'] > best_accu:
                 checkpoint_paths.append(output_dir / 'best_checkpoint.pth')
-                best_acc = val_stats['accu']
+                best_accu = val_stats['accu']
             
             for checkpoint_path in checkpoint_paths:
                 utils.save_on_master({
