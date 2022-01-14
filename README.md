@@ -30,11 +30,12 @@ Please refer to [GETTING_STARGTED.md](docs/GETTING_STARTED.md) to learn how to p
 
 ### Model Zoo
 
-The models with ResNet-50 backbone are available in [[Gdrive]](https://drive.google.com/drive/folders/17CVnc5XOyqqDlg1veXRE9hY9r123Nvqx?usp=sharing)
+The models with ResNet-50 backbone and ResNet-101 backbone are available in [[Gdrive]](https://drive.google.com/drive/folders/17CVnc5XOyqqDlg1veXRE9hY9r123Nvqx?usp=sharing)
 
 <table border="2">
     <thead>
         <tr>
+            <th colspan=1> </th>
             <th colspan=3> &nbsp&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp RefCOCO </th>
             <th colspan=3> &nbsp&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp RefCOCO+</th>
             <th colspan=3> &nbsp&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp RefCOCOg</th>
@@ -42,7 +43,8 @@ The models with ResNet-50 backbone are available in [[Gdrive]](https://drive.goo
         </tr>
     </thead>
     <tbody>
-    <tr>
+    <tr>    
+            <td> </td>
             <td>val</td>
             <td>testA</td>
             <td>testB</td>
@@ -58,6 +60,7 @@ The models with ResNet-50 backbone are available in [[Gdrive]](https://drive.goo
     </tbody>
     <tbody>
     <tr>
+            <td> R-50 </td>
             <td>80.5</td>
             <td>83.2</td>
             <td>75.2</td>
@@ -69,6 +72,22 @@ The models with ResNet-50 backbone are available in [[Gdrive]](https://drive.goo
             <td>67.4</td>
             <td>71.6</td>
             <td>69.3</td>
+        </tr>
+    </tbody>
+    <tbody>
+    <tr>
+            <td> R-101 </td>
+            <td>80.8</td>
+            <td>83.4</td>
+            <td>76.9</td>
+            <td> 68.0 </td>
+            <td> 72.5</td>
+            <td> 59.2</td>
+            <td> 68.0 </td>
+            <td>68.7</td>
+            <td>68.0</td>
+            <td> - </td>
+            <td> - </td>
         </tr>
     </tbody>
 </table>
