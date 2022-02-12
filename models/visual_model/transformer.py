@@ -318,8 +318,8 @@ def build_transformer(args):
         dropout=args.dropout,
         nhead=args.nheads,
         dim_feedforward=args.dim_feedforward,
-        num_encoder_layers=args.enc_layers,
-        num_decoder_layers=args.dec_layers,
+        num_encoder_layers=args.detr_enc_num,
+        num_decoder_layers=0,
         normalize_before=args.pre_norm,
         return_intermediate_dec=True,
     )

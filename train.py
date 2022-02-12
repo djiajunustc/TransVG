@@ -75,6 +75,7 @@ def get_args_parser():
     parser.add_argument('--pre_norm', action='store_true')
 
     parser.add_argument('--imsize', default=640, type=int, help='image size')
+    parser.add_argument('--vision_stride', default=32, type=int, help='stride of vision feature')
     parser.add_argument('--emb_size', default=512, type=int,
                         help='fusion module embedding dimensions')
 
@@ -142,7 +143,7 @@ def main(args):
 
     model_without_ddp = model
     if args.distributed:
-        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], find_unused_parameters=True)
+        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu])
         model_without_ddp = model.module
     n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print('number of params:', n_parameters)
@@ -161,6 +162,9 @@ def main(args):
     text_param = [p for n, p in model_without_ddp.named_parameters() if "textmodel" in n and p.requires_grad]
     rest_param = [p for n, p in model_without_ddp.named_parameters() if (("visumodel" not in n) and ("textmodel" not in n) and p.requires_grad)]
     
+    trained_params = [n for n, p in model_without_ddp.named_parameters() if (("visumodel" in n) and ("backbone" in n) and p.requires_grad)]
+    print('Parameters Requiring Gradients:', trained_params)
+
     
     # using RMSProp or AdamW
     if args.optimizer == 'rmsprop':

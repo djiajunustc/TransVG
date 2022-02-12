@@ -2,6 +2,7 @@
 """
 DETR model and criterion classes.
 """
+import math
 import torch
 import torch.nn.functional as F
 from torch import nn
@@ -44,7 +45,7 @@ class DETR(nn.Module):
                 for p in m.parameters():
                     p.requires_grad_(False)
 
-        self.num_channels = hidden_dim
+        self.num_channels = hidden_dim * 4
 
     def forward(self, samples: NestedTensor):
         """ The forward expects a NestedTensor, which consists of:
@@ -72,7 +73,17 @@ class DETR(nn.Module):
             out = self.transformer(self.input_proj(src), mask, pos[-1], query_embed=None)
         else:
             out = [mask.flatten(1), src.flatten(2).permute(2, 0, 1)]
-             
+        
+        spatial_size = int(math.sqrt(out[1].shape[0]))
+
+        src = out[1].view(spatial_size, spatial_size, out[1].shape[1], -1)
+        src = src.permute(2, 3, 0, 1) # (N, C, H, W)
+        src = F.unfold(src, (2, 2), stride=(2, 2)) # (N, 4C, H//2, W//2)
+
+        mask = out[0].view(-1, spatial_size, spatial_size)[None].float()
+        mask = F.interpolate(mask, size=(spatial_size//2, spatial_size//2)).to(torch.bool)[0]
+
+        out = [mask.flatten(1), src.flatten(2).permute(2, 0, 1)]
         return out
 
 

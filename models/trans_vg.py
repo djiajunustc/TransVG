@@ -13,7 +13,7 @@ class TransVG(nn.Module):
     def __init__(self, args):
         super(TransVG, self).__init__()
         hidden_dim = args.vl_hidden_dim
-        divisor = 16 if args.dilation else 32
+        divisor = args.vision_stride
         self.num_visu_token = int((args.imsize / divisor) ** 2)
         self.num_text_token = args.max_query_len
 

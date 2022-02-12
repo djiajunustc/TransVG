@@ -4,15 +4,18 @@ Backbone modules.
 """
 from collections import OrderedDict
 
+import math
 import torch
 import torch.nn.functional as F
 import torchvision
 from torch import nn
 from torchvision.models._utils import IntermediateLayerGetter
 from typing import Dict, List
+from functools import partial
+from timm.models.vision_transformer import VisionTransformer
+from timm.models.layers import PatchEmbed
 
 from utils.misc import NestedTensor, is_main_process
-
 from .position_encoding import build_position_encoding
 
 
@@ -95,6 +98,119 @@ class Backbone(BackboneBase):
         super().__init__(name, backbone, num_channels, return_interm_layers)
 
 
+class CustomPatchEmbed(PatchEmbed):
+    """ 
+    2D Image to Patch Embedding
+    """
+    def __init__(self, img_size=224, patch_size=16, in_chans=3, embed_dim=768, norm_layer=None, flatten=True):
+        super().__init__(img_size, patch_size, in_chans, embed_dim, flatten=flatten)
+
+    def forward(self, x):
+        x = self.proj(x)
+        if self.flatten:
+            x = x.flatten(2).transpose(1, 2)  # BCHW -> BNC
+        x = self.norm(x)
+        return x
+
+
+class ViTBackbone(nn.Module):
+    """ ViT backbone."""
+    def __init__(self, name: str):
+        super().__init__()
+
+        assert name in ['vit_tiny', \
+                        'vit_small', \
+                        'vit_base']
+
+        if name == 'vit_tiny':
+            embed_dim, num_heads, distilled = 192, 3, True
+        elif name == 'vit_small':
+            embed_dim, num_heads, distilled = 384, 6, True
+        elif name == 'vit_base':
+            embed_dim, num_heads, distilled = 768, 12, True
+
+        backbone = VisionTransformer(
+            patch_size=16, embed_dim=embed_dim, depth=12, num_heads=num_heads,
+            mlp_ratio=4, qkv_bias=True, norm_layer=partial(nn.LayerNorm, eps=1e-6),
+            distilled=distilled, embed_layer=partial(CustomPatchEmbed, flatten=False)
+        )
+
+        self.patch_embed = backbone.patch_embed
+        self.pos_drop    = backbone.pos_drop
+        self.blocks      = backbone.blocks
+        self.norm        = backbone.norm
+
+        self.pos_embed   = nn.Parameter(torch.zeros(1, embed_dim, 56, 56))
+
+        # excluding cls and distill tokens
+        # pos_embed   = backbone.pos_embed
+        # self.pos_embed = pos_embed[:, 2:, :] if distilled is True \
+        #                                         else pos_embed[:, 1:, :]
+        self.num_channels = embed_dim #* 4
+        self.distilled = distilled
+        self.window_size = [14, 28, 56]
+        self.num_blocks_each_stage = [8, 3, 1]
+        
+        # freeze parameters of the first stage
+        for p in [self.patch_embed, self.pos_embed]:
+            p.requires_grad_(False)
+
+        for idx in range(self.num_blocks_each_stage[0]):
+            for p in self.blocks[idx].parameters():
+                p.requires_grad_(False)
+
+    def forward(self, tensor_list: NestedTensor):
+        out: Dict[str, NestedTensor] = {}
+        data = tensor_list.tensors
+        mask = tensor_list.mask[None].float()
+        # pos_embed = self._resize_pos_embed((data.shape[2]//16, data.shape[3]//16))
+
+        x = self.patch_embed(data)
+        x = self.pos_drop(x + self.pos_embed)
+        x = self.forward_by_windows(x)
+        # x = self.blocks(x)
+        x = self.norm(x)
+        out_size = int(math.sqrt(x.shape[1]))
+        x = x.reshape(x.shape[0], out_size, out_size, -1).permute(0, 3, 1, 2)
+        
+        out_h, out_w = x.shape[2], x.shape[3]
+        # out_h, out_w  = x.shape[2] // 2, x.shape[3] // 2
+        # x = F.unfold(x, (2, 2), stride=(2, 2))
+        x = x.reshape(x.shape[0], x.shape[1], out_h, out_w)
+        mask = F.interpolate(mask, size=(out_h, out_w)).to(torch.bool)[0]
+        out['out'] = NestedTensor(x.contiguous(), mask)
+
+        return out
+    
+    def forward_by_windows(self, x):
+        N, C, H, W = x.shape
+        num_stages = len(self.window_size)
+
+        start_block = 0
+        for idx in range(num_stages):
+            win_shape = (self.window_size[idx], self.window_size[idx])
+            win_size = win_shape[0] * win_shape[1]
+            win_num = H * W // win_size
+
+            x = F.unfold(x, win_shape, stride=win_shape) # (N, C*win_size, win_num)
+            x = x.permute(0, 2, 1).contiguous() # (N, win_num, C*win_size)
+            x = x.reshape(N*win_num, C, win_size)
+            x = x.permute(0, 2, 1).contiguous() # (N*win_num, win_size, C)
+
+            x = self.blocks[start_block:start_block+self.num_blocks_each_stage[idx]](x)
+            
+            x = x.permute(0, 2, 1).contiguous() # (N*win_num, C, win_size)
+            x = x.reshape(N, win_num, C*win_size) # (N, win_num, C*win_size)
+            x = x.permute(0, 2, 1).contiguous() # (N, C*win_size, win_num)
+            x = F.fold(x, (H, W), win_shape, stride=win_shape)
+
+            start_block += self.num_blocks_each_stage[idx]
+        
+        x = x.flatten(2).transpose(1, 2).contiguous()
+        
+        return x
+
+
 class Joiner(nn.Sequential):
     def __init__(self, backbone, position_embedding):
         super().__init__(backbone, position_embedding)
@@ -113,9 +229,12 @@ class Joiner(nn.Sequential):
 
 def build_backbone(args):
     position_embedding = build_position_encoding(args)
-    # train_backbone = args.lr_detr > 0
-    return_interm_layers = False
-    backbone = Backbone(args.backbone, return_interm_layers, args.dilation)
+    if args.backbone in ['resnet50', 'resnet101']:
+        return_interm_layers = False
+        backbone = Backbone(args.backbone, return_interm_layers, args.dilation)
+    elif args.backbone in ['vit_small']:
+        backbone = ViTBackbone(args.backbone)
+
     model = Joiner(backbone, position_embedding)
     model.num_channels = backbone.num_channels
     return model
