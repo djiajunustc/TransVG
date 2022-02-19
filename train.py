@@ -82,6 +82,7 @@ def get_args_parser():
     # Transformers in two branches
     parser.add_argument('--bert_enc_num', default=12, type=int)
     parser.add_argument('--detr_enc_num', default=6, type=int)
+    parser.add_argument('--vit_blocks_strategy', default='depth12_v1', type=str)
 
     # Vision-Language Transformer
     parser.add_argument('--vl_dropout', default=0.1, type=float,
@@ -143,7 +144,7 @@ def main(args):
 
     model_without_ddp = model
     if args.distributed:
-        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu])
+        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], find_unused_parameters=True)
         model_without_ddp = model.module
     n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print('number of params:', n_parameters)

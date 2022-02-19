@@ -45,7 +45,7 @@ class DETR(nn.Module):
                 for p in m.parameters():
                     p.requires_grad_(False)
 
-        self.num_channels = hidden_dim * 4
+        self.num_channels = hidden_dim
 
     def forward(self, samples: NestedTensor):
         """ The forward expects a NestedTensor, which consists of:
@@ -78,7 +78,8 @@ class DETR(nn.Module):
 
         src = out[1].view(spatial_size, spatial_size, out[1].shape[1], -1)
         src = src.permute(2, 3, 0, 1) # (N, C, H, W)
-        src = F.unfold(src, (2, 2), stride=(2, 2)) # (N, 4C, H//2, W//2)
+        # src = F.unfold(src, (2, 2), stride=(2, 2)) # (N, 4C, H//2, W//2)
+        src = F.interpolate(src, size=(spatial_size//2, spatial_size//2))
 
         mask = out[0].view(-1, spatial_size, spatial_size)[None].float()
         mask = F.interpolate(mask, size=(spatial_size//2, spatial_size//2)).to(torch.bool)[0]
