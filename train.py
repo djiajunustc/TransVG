@@ -159,9 +159,9 @@ def main(args):
                    {"params": visu_tra_param, "lr": args.lr_visu_tra},
                    {"params": text_tra_param, "lr": args.lr_bert},
                    ]
-    visu_param = [p for n, p in model_without_ddp.named_parameters() if "visumodel" in n and p.requires_grad]
-    text_param = [p for n, p in model_without_ddp.named_parameters() if "textmodel" in n and p.requires_grad]
-    rest_param = [p for n, p in model_without_ddp.named_parameters() if (("visumodel" not in n) and ("textmodel" not in n) and p.requires_grad)]
+    # visu_param = [p for n, p in model_without_ddp.named_parameters() if "visumodel" in n and p.requires_grad]
+    # text_param = [p for n, p in model_without_ddp.named_parameters() if "textmodel" in n and p.requires_grad]
+    # rest_param = [p for n, p in model_without_ddp.named_parameters() if (("visumodel" not in n) and ("textmodel" not in n) and p.requires_grad)]
     
     trained_params = [n for n, p in model_without_ddp.named_parameters() if (("visumodel" in n) and ("backbone" in n) and p.requires_grad)]
     print('Parameters Requiring Gradients:', trained_params)

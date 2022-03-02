@@ -21,7 +21,8 @@ import torch.utils.data as data
 sys.path.append('.')
 
 from PIL import Image
-from pytorch_pretrained_bert.tokenization import BertTokenizer
+from transformers import AutoTokenizer
+# from pytorch_pretrained_bert.tokenization import BertTokenizer
 from utils.word_utils import Corpus
 
 
@@ -161,7 +162,8 @@ class TransVGDataset(data.Dataset):
         self.transform = transform
         self.testmode = testmode
         self.split = split
-        self.tokenizer = BertTokenizer.from_pretrained(bert_model, do_lower_case=True)
+        self.tokenizer = AutoTokenizer.from_pretrained(bert_model, do_lower_case=True)
+        # self.tokenizer = BertTokenizer.from_pretrained(bert_model, do_lower_case=True)
         self.return_idx=return_idx
 
         assert self.transform is not None

@@ -64,4 +64,6 @@ def build_dataset(split, args):
                         dataset=args.dataset,
                         split=split,
                         transform=make_transforms(args, split),
-                        max_query_len=args.max_query_len)
+                        max_query_len=args.max_query_len,
+                        bert_model=args.bert_model
+                        )
