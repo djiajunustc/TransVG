@@ -37,8 +37,6 @@ def get_args_parser():
     parser.add_argument('--lr_drop', default=60, type=int)
     
     # Augmentation options
-    parser.add_argument('--aug_blur', action='store_true',
-                        help="If true, use gaussian blur augmentation")
     parser.add_argument('--aug_crop', action='store_true',
                         help="If true, use random crop augmentation")
     parser.add_argument('--aug_scale', action='store_true',
@@ -81,7 +79,7 @@ def get_args_parser():
 
     # Transformers in two branches
     parser.add_argument('--bert_enc_num', default=12, type=int)
-    parser.add_argument('--detr_enc_num', default=6, type=int)
+    parser.add_argument('--detr_enc_num', default=0, type=int)
     parser.add_argument('--vit_blocks_strategy', default='depth12_v1', type=str)
 
     # Vision-Language Transformer

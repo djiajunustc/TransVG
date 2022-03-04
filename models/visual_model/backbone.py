@@ -115,7 +115,7 @@ class CustomPatchEmbed(PatchEmbed):
 
 class ViTBackbone(nn.Module):
     """ ViT backbone."""
-    def __init__(self, name: str, strategy_idx: str, embed_size: int):
+    def __init__(self, name: str, token_spatial_size: int):
         super().__init__()
 
         assert name in ['vit_tiny', \
@@ -140,33 +140,17 @@ class ViTBackbone(nn.Module):
         self.blocks      = backbone.blocks
         self.norm        = backbone.norm
 
-        self.pos_embed   = nn.Parameter(torch.zeros(1, embed_dim, embed_size, embed_size))
+        self.pos_embed   = nn.Parameter(torch.zeros(1, embed_dim, token_spatial_size, token_spatial_size))
 
         # excluding cls and distill tokens
         # pos_embed   = backbone.pos_embed
         # self.pos_embed = pos_embed[:, 2:, :] if distilled is True \
         #                                         else pos_embed[:, 1:, :]
         self.num_channels = embed_dim #* 4
-        self.distilled = distilled
-        if strategy_idx == 'depth12_v1':
-            self.window_size = [10, 20, 40]
-            self.num_blocks_each_stage = [6, 3, 3]
-        elif strategy_idx == 'depth12_v2':
-            self.window_size = [14, 56, 14, 56, 14, 56]
-            self.num_blocks_each_stage = [3, 1, 3, 1, 3, 1]
-        elif strategy_idx == 'depth12_v3':
-            self.window_size = [7, 14, 28, 56]
-            self.num_blocks_each_stage = [1, 1, 9, 1]
-        elif strategy_idx == 'depth12_v4':
-            self.window_size = [14, 28, 56]
-            self.num_blocks_each_stage = [3, 6, 3]
-        elif strategy_idx == 'depth18_v1':
-            self.window_size = [14, 28, 56]
-            self.num_blocks_each_stage = [12, 3, 3]
-        elif strategy_idx == 'depth18_v2':
-            self.window_size = [14, 28, 56]
-            self.num_blocks_each_stage = [6, 9, 3]
-
+        
+        self.window_size = [token_spatial_size // 2**(2-i) for i in range(3)]
+        self.num_blocks_each_stage = [3, 6, 3]
+        
         # # freeze parameters of the first stage
         # for p in [self.patch_embed, self.pos_embed]:
         #     p.requires_grad_(False)
@@ -189,11 +173,12 @@ class ViTBackbone(nn.Module):
         out_size = int(math.sqrt(x.shape[1]))
         x = x.reshape(x.shape[0], out_size, out_size, -1).permute(0, 3, 1, 2)
         
-        out_h, out_w = x.shape[2], x.shape[3]
+        # out_h, out_w = x.shape[2], x.shape[3]
         # out_h, out_w  = x.shape[2] // 2, x.shape[3] // 2
         # x = F.unfold(x, (2, 2), stride=(2, 2))
-        x = x.reshape(x.shape[0], x.shape[1], out_h, out_w)
-        mask = F.interpolate(mask, size=(out_h, out_w)).to(torch.bool)[0]
+        # x = x.reshape(x.shape[0], x.shape[1], out_h, out_w)
+        
+        mask = F.interpolate(mask, size=(out_size, out_size)).to(torch.bool)[0]
         out['out'] = NestedTensor(x.contiguous(), mask)
 
         return out
@@ -252,9 +237,9 @@ def build_backbone(args):
     if args.backbone in ['resnet50', 'resnet101']:
         return_interm_layers = False
         backbone = Backbone(args.backbone, return_interm_layers, args.dilation)
-    elif args.backbone in ['vit_small']:
-        embed_size = args.imsize // 16
-        backbone = ViTBackbone(args.backbone, args.vit_blocks_strategy, embed_size)
+    elif args.backbone in ['vit_tiny', 'vit_small', 'vit_base']:
+        token_spatial_size = args.imsize // 16
+        backbone = ViTBackbone(args.backbone, token_spatial_size)
         # backbone._resize_pos_embed((tgt_size, tgt_size))
 
     model = Joiner(backbone, position_embedding)
