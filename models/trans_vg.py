@@ -2,30 +2,28 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from pytorch_pretrained_bert.modeling import BertModel
-from .visual_model.detr import build_detr
-from .language_model.bert import build_bert
+from .visual_branch import build_visual_branch
+from .linguistic_branch import build_linguistic_branch
 from .vl_transformer import build_vl_transformer
-from utils.box_utils import xywh2xyxy
 
 
 class TransVG(nn.Module):
     def __init__(self, args):
         super(TransVG, self).__init__()
         hidden_dim = args.vl_hidden_dim
-        divisor = args.vision_stride
+        divisor = args.visual_model_stride
         self.num_visu_token = int((args.imsize / divisor) ** 2)
         self.num_text_token = args.max_query_len
 
-        self.visumodel = build_detr(args)
-        self.textmodel = build_bert(args)
+        self.visual_branch = build_visual_branch(args)
+        self.linguistic_branch = build_linguistic_branch(args)
 
         num_total = self.num_visu_token + self.num_text_token + 1
         self.vl_pos_embed = nn.Embedding(num_total, hidden_dim)
         self.reg_token = nn.Embedding(1, hidden_dim)
 
-        self.visu_proj = nn.Linear(self.visumodel.num_channels, hidden_dim)
-        self.text_proj = nn.Linear(self.textmodel.num_channels, hidden_dim)
+        self.visu_proj = nn.Conv2d(self.visual_branch.num_channels, hidden_dim, kernel_size=(1, 1))
+        self.text_proj = nn.Linear(self.linguistic_branch.num_channels, hidden_dim)
 
         self.vl_transformer = build_vl_transformer(args)
         self.bbox_embed = MLP(hidden_dim, hidden_dim, 4, 3)
@@ -34,18 +32,21 @@ class TransVG(nn.Module):
     def forward(self, img_data, text_data):
         bs = img_data.tensors.shape[0]
 
-        # visual backbone
-        visu_mask, visu_src = self.visumodel(img_data)
-        visu_src = self.visu_proj(visu_src) # (N*B)xC
-
-        # language bert
-        text_fea = self.textmodel(text_data)
-        text_src, text_mask = text_fea.decompose()
+        # Language branch
+        ling_out = self.linguistic_branch(text_data)
+        text_src, text_mask = ling_out.decompose()
         assert text_mask is not None
         text_src = self.text_proj(text_src)
         # permute BxLenxC to LenxBxC
         text_src = text_src.permute(1, 0, 2)
         text_mask = text_mask.flatten(1)
+
+        # Visual branch
+        visu_out = self.visual_branch(img_data)
+        visu_src, visu_mask = visu_out.decompose()
+        visu_src = self.visu_proj(visu_src)
+        visu_src = visu_src.flatten(2).permute(2, 0, 1) # (N, B, C)
+        visu_mask = visu_mask.flatten(1)
 
         # target regression token
         tgt_src = self.reg_token.weight.unsqueeze(1).repeat(1, bs, 1)
