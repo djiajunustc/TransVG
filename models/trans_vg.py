@@ -12,6 +12,7 @@ class TransVG(nn.Module):
         super(TransVG, self).__init__()
         hidden_dim = args.vl_hidden_dim
         self.stride = args.visual_model_stride
+        assert self.stride in [16, 32, 64]
         self.num_visu_token = int((args.imsize / self.stride) ** 2)
         self.num_text_token = args.max_query_len
 
