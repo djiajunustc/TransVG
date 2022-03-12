@@ -2,7 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .comp_visual_branch import build_visual_branch
+# from .comp_visual_branch import build_visual_branch
+from .visual_branch import build_visual_branch
 from .linguistic_branch import build_linguistic_branch
 from .vl_transformer import build_vl_transformer
 
