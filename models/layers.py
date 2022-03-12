@@ -37,25 +37,6 @@ class Attention(nn.Module):
         return x
 
 
-class Block(nn.Module):
-
-    def __init__(self, dim, num_heads, mlp_ratio=4., qkv_bias=False, drop=0., attn_drop=0.,
-                 drop_path=0., act_layer=nn.GELU, norm_layer=nn.LayerNorm):
-        super().__init__()
-        self.norm1 = norm_layer(dim)
-        self.attn = Attention(dim, num_heads=num_heads, qkv_bias=qkv_bias, attn_drop=attn_drop, proj_drop=drop)
-        # NOTE: drop path for stochastic depth, we shall see if this is better than dropout here
-        self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
-        self.norm2 = norm_layer(dim)
-        mlp_hidden_dim = int(dim * mlp_ratio)
-        self.mlp = Mlp(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop)
-
-    def forward(self, x):
-        x = x + self.drop_path(self.attn(self.norm1(x)))
-        x = x + self.drop_path(self.mlp(self.norm2(x)))
-        return x
-
-
 class PatchEmbed(nn.Module):
     """ 
     2D Image to Patch Embedding
@@ -75,3 +56,46 @@ class PatchEmbed(nn.Module):
             x = x.flatten(2).transpose(1, 2)  # BCHW -> BNC
         x = self.norm(x)
         return x
+
+
+class AttentionV2(nn.Module):
+    def __init__(self, dim, num_heads=8, qkv_bias=False, attn_drop=0., proj_drop=0.):
+        super().__init__()
+        assert dim % num_heads == 0, 'dim should be divisible by num_heads'
+        self.num_heads = num_heads
+        head_dim = dim // num_heads
+        self.scale = head_dim ** -0.5
+
+        # self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
+        self.q_in = nn.Linear(dim, dim, bias=qkv_bias)
+        self.k_in = nn.Linear(dim, dim, bias=qkv_bias)
+        self.v_in = nn.Linear(dim, dim, bias=qkv_bias)
+
+        self.attn_drop = nn.Dropout(attn_drop)
+        self.proj = nn.Linear(dim, dim)
+        self.proj_drop = nn.Dropout(proj_drop)
+
+    def forward(self, q, k, v, attn_mask=None):
+        B, N, C = q.shape
+        M = k.shape[1]
+        q = self.q_in(q).reshape(B, N, self.num_heads, C // self.num_heads).permute(0, 2, 1, 3) # (B, num_heads, N, C//num_heads)
+        k = self.k_in(k).reshape(B, M, self.num_heads, C // self.num_heads).permute(0, 2, 1, 3) # (B, num_heads, M, C//num_heads)
+        v = self.v_in(v).reshape(B, M, self.num_heads, C // self.num_heads).permute(0, 2, 1, 3) # (B, num_heads, M, C//num_heads)
+
+        attn = (q @ k.transpose(-2, -1)) * self.scale
+        if attn_mask is not None and attn_mask.dtype == torch.bool:
+            new_attn_mask = torch.zeros_like(attn_mask, dtype=q.dtype)
+            new_attn_mask.masked_fill_(attn_mask, float("-inf"))
+            attn_mask = new_attn_mask
+            # import pdb
+            # pdb.set_trace()
+            attn = attn + attn_mask
+        attn = attn.softmax(dim=-1)
+        attn = self.attn_drop(attn)
+
+        x = (attn @ v).transpose(1, 2).reshape(B, N, C)
+        x = self.proj(x)
+        x = self.proj_drop(x)
+        return x
+        
+    

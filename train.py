@@ -80,7 +80,7 @@ def get_args_parser():
     parser.add_argument('--bert_enc_num', default=12, type=int)
     parser.add_argument('--detr_enc_num', default=0, type=int)
     parser.add_argument('--bert_model', default='bert-base-uncased', type=str, help='bert model')
-    parser.add_argument('--vit_model', default='vit_small', type=str, help='vit model')
+    parser.add_argument('--vit_model', default='small', type=str, help='vit model')
     parser.add_argument('--sparse_vit', action='store_true')
 
     # Vision-Language Transformer
@@ -94,6 +94,8 @@ def get_args_parser():
                         help="Intermediate size of the feedforward layers in the vision-language transformer blocks")
     parser.add_argument('--vl_enc_layers', default=6, type=int,
                         help='Number of encoders in the vision-language transformer')
+    parser.add_argument('--vl_normalize_before', action='store_true')
+    parser.add_argument('--vl_activation', default='relu', type=str)
 
     # Dataset parameters
     parser.add_argument('--data_root', type=str, default='./ln_data/',

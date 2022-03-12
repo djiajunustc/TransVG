@@ -5,7 +5,8 @@ import torch.nn.functional as F
 # from .comp_visual_branch import build_visual_branch
 from .visual_branch import build_visual_branch
 from .linguistic_branch import build_linguistic_branch
-from .vl_transformer import build_vl_transformer
+# from .vl_transformer import build_vl_transformer
+from .vl_module import build_vl_module
 
 
 class TransVG(nn.Module):
@@ -14,21 +15,27 @@ class TransVG(nn.Module):
         hidden_dim = args.vl_hidden_dim
         self.stride = args.visual_model_stride
         assert self.stride in [16, 32, 64]
-        self.num_visu_token = int((args.imsize / self.stride) ** 2)
-        self.num_text_token = args.max_query_len
+        num_vtoken = int((args.imsize / self.stride) ** 2)
+        num_ltoken = args.max_query_len
 
         self.visual_branch = build_visual_branch(args)
         self.linguistic_branch = build_linguistic_branch(args)
 
-        num_total = self.num_visu_token + self.num_text_token + 1
-        self.vl_pos_embed = nn.Embedding(num_total, hidden_dim)
-        self.reg_token = nn.Embedding(1, hidden_dim)
-
         self.visu_proj = nn.Conv2d(self.visual_branch.num_channels, hidden_dim, kernel_size=(1, 1))
         self.text_proj = nn.Linear(self.linguistic_branch.num_channels, hidden_dim)
 
-        self.vl_transformer = build_vl_transformer(args)
+        self.vl_module = build_vl_module(args, num_vtoken, num_ltoken)
         self.bbox_embed = MLP(hidden_dim, 256, 4, 3)
+
+        # num_total = self.num_visu_token + self.num_text_token + 1
+        # self.vl_pos_embed = nn.Embedding(num_total, hidden_dim)
+        # self.reg_token = nn.Embedding(1, hidden_dim)
+
+        # self.visu_proj = nn.Conv2d(self.visual_branch.num_channels, hidden_dim, kernel_size=(1, 1))
+        # self.text_proj = nn.Linear(self.linguistic_branch.num_channels, hidden_dim)
+
+        # self.vl_transformer = build_vl_transformer(args)
+        # self.bbox_embed = MLP(hidden_dim, 256, 4, 3)
 
 
     def forward(self, img_data, text_data):
@@ -40,7 +47,7 @@ class TransVG(nn.Module):
         assert text_mask is not None
         text_src = self.text_proj(text_src)
         # permute BxLenxC to LenxBxC
-        text_src = text_src.permute(1, 0, 2)
+        # text_src = text_src.permute(1, 0, 2)
         text_mask = text_mask.flatten(1)
 
         # Visual branch
@@ -53,21 +60,27 @@ class TransVG(nn.Module):
             visu_mask = F.interpolate(visu_mask, size=(tgt_size, tgt_size)).to(torch.bool)[0]
 
         visu_src = self.visu_proj(visu_src)
-        visu_src = visu_src.flatten(2).permute(2, 0, 1) # (N, B, C)
+        # visu_src = visu_src.flatten(2).permute(2, 0, 1) # (N, B, C)
+        visu_src = visu_src.flatten(2).permute(0, 2, 1) # (B, N, C)
         visu_mask = visu_mask.flatten(1)
 
-        # target regression token
-        tgt_src = self.reg_token.weight.unsqueeze(1).repeat(1, bs, 1)
-        tgt_mask = torch.zeros((bs, 1)).to(tgt_src.device).to(torch.bool)
+        # # target regression token
+        # tgt_src = self.reg_token.weight.unsqueeze(1).repeat(1, bs, 1)
+        # tgt_mask = torch.zeros((bs, 1)).to(tgt_src.device).to(torch.bool)
         
-        vl_src = torch.cat([tgt_src, text_src, visu_src], dim=0)
-        vl_mask = torch.cat([tgt_mask, text_mask, visu_mask], dim=1)
-        vl_pos = self.vl_pos_embed.weight.unsqueeze(1).repeat(1, bs, 1)
+        reg_src = self.vl_module(visu_src, visu_mask, text_src, text_mask)
 
-        vg_hs = self.vl_transformer(vl_src, vl_mask, vl_pos) # (1+L+N)xBxC
-        vg_hs = vg_hs[0]
+        # vl_src = torch.cat([tgt_src, text_src, visu_src], dim=0) # (N, B, C)
+        # vl_mask = torch.cat([tgt_mask, text_mask, visu_mask], dim=1) # (B, N)
+        # vl_pos = self.vl_pos_embed.weight.unsqueeze(1).repeat(1, bs, 1) # (N, B, C)
 
-        pred_box = self.bbox_embed(vg_hs).sigmoid()
+        # import pdb
+        # pdb.set_trace()
+
+        # vg_hs = self.vl_transformer(vl_src, vl_mask, vl_pos) # (1+L+N)xBxC
+        # vg_hs = vg_hs[0]
+
+        pred_box = self.bbox_embed(reg_src).sigmoid()
 
         return pred_box
 
