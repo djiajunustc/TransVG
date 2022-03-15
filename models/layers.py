@@ -87,6 +87,9 @@ class AttentionV2(nn.Module):
             new_attn_mask = torch.zeros_like(attn_mask, dtype=q.dtype)
             new_attn_mask.masked_fill_(attn_mask, float("-inf"))
             attn_mask = new_attn_mask
+            # print(attn.shape)
+            # print(attn_mask.shape)
+            # input()
             # import pdb
             # pdb.set_trace()
             attn = attn + attn_mask
