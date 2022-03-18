@@ -213,7 +213,7 @@ def build_vl_module(args, num_vtoken, num_ltoken):
     elif args.vit_model == 'base':
         embed_dim, num_heads = 768, 12
 
-    model = VLTransformer(embed_dim=embed_dim, depth=6, \
+    model = VLTransformer(embed_dim=embed_dim, depth=args.vl_depth, \
                           num_heads=num_heads, mlp_ratio=4, qkv_bias=True, \
                           num_vtoken=num_vtoken, num_ltoken=num_ltoken, \
                           norm_layer=partial(nn.LayerNorm, eps=1e-5), \

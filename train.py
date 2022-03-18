@@ -92,7 +92,7 @@ def get_args_parser():
                         help='Size of the embeddings (dimension of the vision-language transformer)')
     parser.add_argument('--vl_dim_feedforward', default=2048, type=int,
                         help="Intermediate size of the feedforward layers in the vision-language transformer blocks")
-    parser.add_argument('--vl_enc_layers', default=6, type=int,
+    parser.add_argument('--vl_depth', default=6, type=int,
                         help='Number of encoders in the vision-language transformer')
     parser.add_argument('--vl_normalize_before', action='store_true')
     parser.add_argument('--vl_activation', default='relu', type=str)

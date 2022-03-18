@@ -1,7 +1,7 @@
-export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5
+export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 
 # # RefCOCOg g-split
-python -m torch.distributed.launch --nproc_per_node=6 --use_env train.py --batch_size 16 --bert_model bert-base-uncased --vit_model small --visual_model_stride 32 --lr_bert 0.00001 --dataset gref --aug_scale --aug_crop --aug_translate --visual_pretrained ../DETR-Models/vit_small_for_transvg_640.pth --vl_hidden_dim 384 --max_query_len 40 --output_dir outputs/2022_03_13/refcocog_gsplit_vit_small_cross_lang --imsize 640 --epochs 90 --lr_drop 60
+python -m torch.distributed.launch --nproc_per_node=8 --use_env train.py --batch_size 16 --bert_model bert-base-uncased --vit_model tiny --visual_model_stride 32 --lr_bert 0.00001 --dataset gref --aug_scale --aug_crop --aug_translate --visual_pretrained ../DETR-Models/vit_tiny_for_transvg_640.pth --vl_hidden_dim 192 --vl_depth 3 --max_query_len 40 --output_dir outputs/2022_03_18/refcocog_gsplit_vit_tiny_cross_lang_depth3 --imsize 640 --epochs 90 --lr_drop 60
 
 # python train.py --batch_size 16 --bert_model bert-base-uncased --vit_model tiny --visual_model_stride 32 --lr_bert 0.00001 --dataset gref --aug_scale --aug_crop --aug_translate --visual_pretrained ../DETR-Models/vit_tiny_for_transvg_640.pth --vl_hidden_dim 192 --vl_dim_feedforward 768 --vl_nheads 3 --vl_enc_layers 6 --max_query_len 40 --output_dir outputs/2022_03_12/refcocog_gsplit_vit_tiny_cross_lang --imsize 640 --epochs 90 --lr_drop 60
 
