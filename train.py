@@ -82,6 +82,7 @@ def get_args_parser():
     parser.add_argument('--bert_model', default='bert-base-uncased', type=str, help='bert model')
     parser.add_argument('--vit_model', default='small', type=str, help='vit model')
     parser.add_argument('--sparse_vit', action='store_true')
+    parser.add_argument('--without_reg_token', action='store_true')
 
     # Vision-Language Transformer
     parser.add_argument('--vl_dropout', default=0.1, type=float,

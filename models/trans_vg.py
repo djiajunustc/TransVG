@@ -7,6 +7,7 @@ from .visual_branch import build_visual_branch
 from .linguistic_branch import build_linguistic_branch
 # from .vl_transformer import build_vl_transformer
 from .vl_module import build_vl_module
+from .vl_module_no_rt import build_vl_module_no_rt
 
 
 class TransVG(nn.Module):
@@ -24,7 +25,10 @@ class TransVG(nn.Module):
         self.visu_proj = nn.Conv2d(self.visual_branch.num_channels, hidden_dim, kernel_size=(1, 1))
         self.text_proj = nn.Linear(self.linguistic_branch.num_channels, hidden_dim)
 
-        self.vl_module = build_vl_module(args, num_vtoken, num_ltoken)
+        if args.without_reg_token:
+            self.vl_module = build_vl_module_no_rt(args, num_vtoken, num_ltoken)    
+        else:
+            self.vl_module = build_vl_module(args, num_vtoken, num_ltoken)
         self.bbox_embed = MLP(hidden_dim, 256, 4, 3)
 
         # num_total = self.num_visu_token + self.num_text_token + 1
