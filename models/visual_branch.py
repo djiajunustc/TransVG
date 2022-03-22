@@ -7,34 +7,55 @@ from functools import partial
 # from timm.models.layers import PatchEmbed
 from utils.misc import NestedTensor
 from timm.models.layers import Mlp, DropPath #, trunc_normal_, lecun_normal_
-from .layers import Attention, PatchEmbed
+from .layers import AttentionV2, PatchEmbed
 
 
-class Block(nn.Module):
+# class VisualBlock(nn.Module):
 
-    def __init__(self, dim, num_heads, mlp_ratio=4., qkv_bias=False, drop=0., attn_drop=0.,
-                 drop_path=0., act_layer=nn.GELU, norm_layer=nn.LayerNorm):
+#     def __init__(self, dim, num_heads, mlp_ratio=4., qkv_bias=False, drop=0., attn_drop=0.,
+#                  drop_path=0., act_layer=nn.GELU, norm_layer=nn.LayerNorm):
+#         super().__init__()
+#         self.norm1 = norm_layer(dim)
+#         self.attn = Attention(dim, num_heads=num_heads, qkv_bias=qkv_bias, attn_drop=attn_drop, proj_drop=drop)
+#         # NOTE: drop path for stochastic depth, we shall see if this is better than dropout here
+#         self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
+#         self.norm2 = norm_layer(dim)
+#         mlp_hidden_dim = int(dim * mlp_ratio)
+#         self.mlp = Mlp(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop)
+
+#     def forward(self, x):
+#         x = x + self.drop_path(self.attn(self.norm1(x)))
+#         x = x + self.drop_path(self.mlp(self.norm2(x)))
+#         return x
+
+
+class VisualBlock(nn.Module):
+
+    def __init__(self, dim, num_heads, mlp_ratio=4., qkv_bias=False, 
+                 drop=0., attn_drop=0., drop_path=0., act_layer=nn.GELU, 
+                 norm_layer=nn.LayerNorm):
         super().__init__()
         self.norm1 = norm_layer(dim)
-        self.attn = Attention(dim, num_heads=num_heads, qkv_bias=qkv_bias, attn_drop=attn_drop, proj_drop=drop)
+        self.attn = AttentionV2(dim, num_heads=num_heads, qkv_bias=qkv_bias, attn_drop=attn_drop, proj_drop=drop)
         # NOTE: drop path for stochastic depth, we shall see if this is better than dropout here
         self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
         self.norm2 = norm_layer(dim)
         mlp_hidden_dim = int(dim * mlp_ratio)
         self.mlp = Mlp(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop)
 
-    def forward(self, x):
-        x = x + self.drop_path(self.attn(self.norm1(x)))
+    def forward(self, x, attn_mask):
+        norm_x = self.norm1(x)
+        x = x + self.drop_path(self.attn(norm_x, norm_x, norm_x, attn_mask))
         x = x + self.drop_path(self.mlp(self.norm2(x)))
         return x
 
 
-class WindowedViT(nn.Module):
-    """ Windowed Vision Transformers """
-    def __init__(self, img_size=224, patch_size=16, in_chans=3, embed_dim=768, depth=12, 
-                 num_heads=12, mlp_ratio=4., qkv_bias=True, 
+class VisionTransformer(nn.Module):
+    """ Vision Transformers """
+    def __init__(self, img_size=224, patch_size=16, in_chans=3, embed_dim=768, \
+                 depth=12, num_heads=12, mlp_ratio=4., qkv_bias=True, 
                  drop_rate=0., attn_drop_rate=0., drop_path_rate=0., embed_layer=PatchEmbed, norm_layer=None, act_layer=None, 
-                 sparse=False):
+                 VL_LOC=[3, 6, 9]):
         """
         Args:
             img_size (int, tuple): input image size
@@ -54,79 +75,52 @@ class WindowedViT(nn.Module):
         """
         super().__init__()
         self.num_channels = self.embed_dim = embed_dim  # num_features for consistency with other models
-        
+        self.num_heads = num_heads
+
         norm_layer = norm_layer or partial(nn.LayerNorm, eps=1e-6)
         act_layer = act_layer or nn.GELU
 
         self.patch_embed = embed_layer(
             img_size=img_size, patch_size=patch_size, in_chans=in_chans, embed_dim=embed_dim, flatten=False)
-        embed_shape = self.patch_embed.embed_shape
-
-        self.pos_embed = nn.Parameter(torch.zeros(1, embed_dim, embed_shape, embed_shape))
+        self.embed_shape = self.patch_embed.embed_shape
+        
+        self.pos_embed = nn.Parameter(torch.zeros(1, embed_dim, self.embed_shape, self.embed_shape))
         self.pos_drop = nn.Dropout(p=drop_rate)
 
         dpr = [x.item() for x in torch.linspace(0, drop_path_rate, depth)]  # stochastic depth decay rule
         self.blocks = nn.Sequential(*[
-            Block(
+            VisualBlock(
                 dim=embed_dim, num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias, drop=drop_rate,
-                attn_drop=attn_drop_rate, drop_path=dpr[i], norm_layer=norm_layer, act_layer=act_layer)
+                attn_drop=attn_drop_rate, drop_path=dpr[i], 
+                norm_layer=norm_layer, act_layer=act_layer)
             for i in range(depth)])
         self.norm = norm_layer(embed_dim)
-        self.window_size = [embed_shape//4, embed_shape//2, embed_shape]
-        self.num_blocks_each_stage = [3, 6, 3]
+    
+    def forward(self, img_data: NestedTensor):
+        visu_src, visu_mask = img_data.decompose()
+        batch_size = visu_src.shape[0]
 
-
-    def forward(self, tensor_list: NestedTensor):
-        out: Dict[str, NestedTensor] = {}
-        data = tensor_list.tensors
-        mask = tensor_list.mask[None].float()
-
-        x = self.patch_embed(data)
-        x = self.pos_drop(x + self.pos_embed)
-        x = self.forward_by_windows(x)
-        x = self.norm(x)
-        out_size = int(math.sqrt(x.shape[1]))
-        # [B, C, out_size, out_size]
-        x = x.reshape(x.shape[0], out_size, out_size, -1).permute(0, 3, 1, 2)
+        visu_src = self.patch_embed(visu_src)
+        visu_src = self.pos_drop(visu_src + self.pos_embed)
+        visu_src = visu_src.flatten(2).transpose(1, 2)
+        # visu_size = int(math.sqrt(visu_src.shape[1]))
         
-        # out_h, out_w = x.shape[2], x.shape[3]
-        # out_h, out_w  = x.shape[2] // 2, x.shape[3] // 2
-        # x = F.unfold(x, (2, 2), stride=(2, 2))
-        # x = x.reshape(x.shape[0], x.shape[1], out_h, out_w)
+        visu_mask = visu_mask[None].float()
+        visu_mask = F.interpolate(visu_mask, size=(self.embed_shape, self.embed_shape)).to(torch.bool)[0]
+        visu_mask_expanded = visu_mask.view(batch_size, 1, 1, self.embed_shape**2). \
+            expand(-1, self.num_heads, -1, -1)
         
-        mask = F.interpolate(mask, size=(out_size, out_size)).to(torch.bool)[0]
-        out = NestedTensor(x.contiguous(), mask)
+        for i, block in enumerate(self.blocks):
+            visu_src = block(visu_src, visu_mask_expanded)
+
+        if self.norm is not None:
+            visu_src = self.norm(visu_src)
+        
+        visu_src = visu_src.reshape(batch_size, self.embed_shape, self.embed_shape, -1).permute(0, 3, 1, 2)
+        out = NestedTensor(visu_src.contiguous(), visu_mask)
 
         return out
-    
-    def forward_by_windows(self, x):
-        N, C, H, W = x.shape
-        num_stages = len(self.window_size)
 
-        start_block = 0
-        for idx in range(num_stages):
-            win_shape = (self.window_size[idx], self.window_size[idx])
-            win_size = win_shape[0] * win_shape[1]
-            win_num = H * W // win_size
-
-            x = F.unfold(x, win_shape, stride=win_shape) # (N, C*win_size, win_num)
-            x = x.permute(0, 2, 1).contiguous() # (N, win_num, C*win_size)
-            x = x.reshape(N*win_num, C, win_size)
-            x = x.permute(0, 2, 1).contiguous() # (N*win_num, win_size, C)
-
-            x = self.blocks[start_block:start_block+self.num_blocks_each_stage[idx]](x)
-            
-            x = x.permute(0, 2, 1).contiguous() # (N*win_num, C, win_size)
-            x = x.reshape(N, win_num, C*win_size) # (N, win_num, C*win_size)
-            x = x.permute(0, 2, 1).contiguous() # (N, C*win_size, win_num)
-            x = F.fold(x, (H, W), win_shape, stride=win_shape)
-
-            start_block += self.num_blocks_each_stage[idx]
-        
-        x = x.flatten(2).transpose(1, 2).contiguous()
-        
-        return x
-    
     def _resize_pos_embed(self, tgt_size):
         resized_pos_embed = F.interpolate(self.pos_embed, size=tgt_size, mode='bicubic', align_corners=False)
         self.pos_embed = nn.Parameter(resized_pos_embed)
@@ -141,10 +135,11 @@ def build_visual_branch(args):
         embed_dim, num_heads = 768, 12
     
     # embed_shape2d = [int(args.imsize//16) for _ in range(2)]
-    model = WindowedViT(img_size=args.imsize, patch_size=16, embed_dim=embed_dim, \
-                        depth=12, num_heads=num_heads, mlp_ratio=4, qkv_bias=True, \
+    model = VisionTransformer(img_size=args.imsize, patch_size=16, \
+                        embed_dim=embed_dim, depth=12, num_heads=num_heads, \
+                        mlp_ratio=4, qkv_bias=True, \
                         norm_layer=partial(nn.LayerNorm, eps=1e-6), \
                         embed_layer=partial(PatchEmbed, flatten=False), \
-                        sparse=args.sparse_vit)
+                        VL_LOC=[3,6,9])
 
     return model

@@ -81,7 +81,7 @@ def get_args_parser():
     parser.add_argument('--detr_enc_num', default=0, type=int)
     parser.add_argument('--bert_model', default='bert-base-uncased', type=str, help='bert model')
     parser.add_argument('--vit_model', default='small', type=str, help='vit model')
-    parser.add_argument('--sparse_vit', action='store_true')
+    parser.add_argument('--separate_qkv', action='store_true')
     parser.add_argument('--without_reg_token', action='store_true')
 
     # Vision-Language Transformer
@@ -226,18 +226,20 @@ def main(args):
     elif args.visual_pretrained is not None:
         checkpoint = torch.load(args.visual_pretrained, map_location='cpu')
         # if use sparse vit, split qkv.weight/bias into q.weight/bias and kv.weight/bias
-        if args.sparse_vit:
+        if args.separate_qkv:
             pretrained_param_dict = {}
             for key in checkpoint['model'].keys():
                 if 'qkv' in key:
                     num_out = checkpoint['model'][key].shape[0]
                     num_q = int(num_out // 3)
                     if 'weight' in key:
-                        pretrained_param_dict[key.replace('qkv', 'q')] = checkpoint['model'][key][:num_q, :]
-                        pretrained_param_dict[key.replace('qkv', 'kv')] = checkpoint['model'][key][num_q:, :]
+                        pretrained_param_dict[key.replace('qkv', 'q_in')] = checkpoint['model'][key][:num_q, :]
+                        pretrained_param_dict[key.replace('qkv', 'k_in')] = checkpoint['model'][key][num_q:2*num_q, :]
+                        pretrained_param_dict[key.replace('qkv', 'v_in')] = checkpoint['model'][key][2*num_q:, :]
                     elif 'bias' in key:
-                        pretrained_param_dict[key.replace('qkv', 'q')] = checkpoint['model'][key][:num_q]
-                        pretrained_param_dict[key.replace('qkv', 'kv')] = checkpoint['model'][key][num_q:]
+                        pretrained_param_dict[key.replace('qkv', 'q_in')] = checkpoint['model'][key][:num_q]
+                        pretrained_param_dict[key.replace('qkv', 'k_in')] = checkpoint['model'][key][num_q:2*num_q]
+                        pretrained_param_dict[key.replace('qkv', 'v_in')] = checkpoint['model'][key][2*num_q:]
 
                     # pretrained_param_dict[key.replace('qkv', 'q')] = checkpoint['model'][key]
                     # pretrained_param_dict[key.replace('qkv', 'kv')] = checkpoint['model'][key]
