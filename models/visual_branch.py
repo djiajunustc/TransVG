@@ -10,25 +10,6 @@ from timm.models.layers import Mlp, DropPath #, trunc_normal_, lecun_normal_
 from .layers import AttentionV2, PatchEmbed
 
 
-# class VisualBlock(nn.Module):
-
-#     def __init__(self, dim, num_heads, mlp_ratio=4., qkv_bias=False, drop=0., attn_drop=0.,
-#                  drop_path=0., act_layer=nn.GELU, norm_layer=nn.LayerNorm):
-#         super().__init__()
-#         self.norm1 = norm_layer(dim)
-#         self.attn = Attention(dim, num_heads=num_heads, qkv_bias=qkv_bias, attn_drop=attn_drop, proj_drop=drop)
-#         # NOTE: drop path for stochastic depth, we shall see if this is better than dropout here
-#         self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
-#         self.norm2 = norm_layer(dim)
-#         mlp_hidden_dim = int(dim * mlp_ratio)
-#         self.mlp = Mlp(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop)
-
-#     def forward(self, x):
-#         x = x + self.drop_path(self.attn(self.norm1(x)))
-#         x = x + self.drop_path(self.mlp(self.norm2(x)))
-#         return x
-
-
 class VisualBlock(nn.Module):
 
     def __init__(self, dim, num_heads, mlp_ratio=4., qkv_bias=False, 
@@ -46,6 +27,33 @@ class VisualBlock(nn.Module):
     def forward(self, x, attn_mask):
         norm_x = self.norm1(x)
         x = x + self.drop_path(self.attn(norm_x, norm_x, norm_x, attn_mask))
+        x = x + self.drop_path(self.mlp(self.norm2(x)))
+        return x
+
+
+class VLBlock(nn.Module):
+
+    def __init__(self, dim, num_heads, mlp_ratio=4., qkv_bias=False, 
+                 drop=0., attn_drop=0., drop_path=0., act_layer=nn.GELU, 
+                 norm_layer=nn.LayerNorm):
+        super().__init__()
+        self.norm1 = norm_layer(dim)
+        self.attn = AttentionV2(dim, num_heads=num_heads, qkv_bias=qkv_bias, attn_drop=attn_drop, proj_drop=drop)
+        # NOTE: drop path for stochastic depth, we shall see if this is better than dropout here
+        self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
+        self.norm2 = norm_layer(dim)
+        mlp_hidden_dim = int(dim * mlp_ratio)
+        self.mlp = Mlp(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop)
+
+        # v-l attn
+        self.vl_attn = AttentionV2(dim, num_heads=num_heads, qkv_bias=qkv_bias, attn_drop=attn_drop, proj_drop=drop)
+        self.norm3 = norm_layer(dim)
+
+
+    def forward(self, x, y, x_mask, y_mask):
+        norm_x = self.norm1(x)
+        x = x + self.drop_path(self.attn(norm_x, norm_x, norm_x, attn_mask))
+        x = x + self.drop_path(self.vl_attn(x, y, y, y_mask))
         x = x + self.drop_path(self.mlp(self.norm2(x)))
         return x
 
@@ -88,16 +96,31 @@ class VisionTransformer(nn.Module):
         self.pos_drop = nn.Dropout(p=drop_rate)
 
         dpr = [x.item() for x in torch.linspace(0, drop_path_rate, depth)]  # stochastic depth decay rule
-        self.blocks = nn.Sequential(*[
-            VisualBlock(
-                dim=embed_dim, num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias, drop=drop_rate,
-                attn_drop=attn_drop_rate, drop_path=dpr[i], 
-                norm_layer=norm_layer, act_layer=act_layer)
-            for i in range(depth)])
+
+        block_list = []
+        for i in range(depth):
+            if i in VL_LOC:
+                block_list.append(
+                    VLBlock(dim=embed_dim, num_heads=num_heads,
+                            mlp_ratio=mlp_ratio, qkv_bias=qkv_bias,
+                            drop=drop_rate, attn_drop=attn_drop_rate,
+                            drop_path=dpr[i], norm_layer=norm_layer,
+                            act_layer=act_layer)
+                )
+            else:
+                block_list.append(
+                    VisualBlock(dim=embed_dim, num_heads=num_heads, 
+                                mlp_ratio=mlp_ratio, qkv_bias=qkv_bias, 
+                                drop=drop_rate, attn_drop=attn_drop_rate, 
+                                drop_path=dpr[i], norm_layer=norm_layer, 
+                                act_layer=act_layer)    
+                )
+        self.blocks = nn.ModuleList(block_list)
         self.norm = norm_layer(embed_dim)
+
+        self.vl_location = VL_LOC
     
-    def forward(self, img_data: NestedTensor):
-        visu_src, visu_mask = img_data.decompose()
+    def forward(self, visu_src, ling_src, visu_mask, ling_mask):
         batch_size = visu_src.shape[0]
 
         visu_src = self.patch_embed(visu_src)
@@ -107,14 +130,21 @@ class VisionTransformer(nn.Module):
         
         visu_mask = visu_mask[None].float()
         visu_mask = F.interpolate(visu_mask, size=(self.embed_shape, self.embed_shape)).to(torch.bool)[0]
-        visu_mask_expanded = visu_mask.view(batch_size, 1, 1, self.embed_shape**2). \
-            expand(-1, self.num_heads, -1, -1)
         
+        visu_mask_expanded = visu_mask.view(batch_size, 1, 1, self.embed_shape**2).expand(-1, self.num_heads, -1, -1)
+        ling_mask_expanded = ling_mask.view(batch_size, 1, 1, -1).expand(-1, self.num_heads, -1, -1)
+
         for i, block in enumerate(self.blocks):
-            visu_src = block(visu_src, visu_mask_expanded)
+            if i in self.vl_location:
+                visu_src = block(visu_src, ling_src, visu_mask_expanded, ling_mask_expanded)
+            else:
+                visu_src = block(visu_src, visu_mask_expanded)
 
         if self.norm is not None:
             visu_src = self.norm(visu_src)
+        
+        import pdb
+        pdb.set_trace()
         
         visu_src = visu_src.reshape(batch_size, self.embed_shape, self.embed_shape, -1).permute(0, 3, 1, 2)
         out = NestedTensor(visu_src.contiguous(), visu_mask)

@@ -47,12 +47,17 @@ class TransVG(nn.Module):
 
         # Language branch
         ling_out = self.linguistic_branch(text_data)
-        text_src, text_mask = ling_out.decompose()
-        assert text_mask is not None
-        text_src = self.text_proj(text_src)
-        # permute BxLenxC to LenxBxC
-        # text_src = text_src.permute(1, 0, 2)
-        text_mask = text_mask.flatten(1)
+        ling_src, ling_mask = ling_out.decompose()
+        ling_src = self.text_proj(ling_src)
+
+        # Visual-Linguistic module
+        visu_src, visu_mask = img_data.decompose()
+        visu_out = self.visual_branch(visu_src, ling_src, visu_mask, ling_mask)
+
+        
+        import pdb
+        pdb.set_trace()
+
 
         # Visual branch
         visu_out = self.visual_branch(img_data)
