@@ -52,7 +52,7 @@ class VLBlock(nn.Module):
 
     def forward(self, x, y, x_mask, y_mask):
         norm_x = self.norm1(x)
-        x = x + self.drop_path(self.attn(norm_x, norm_x, norm_x, attn_mask))
+        x = x + self.drop_path(self.attn(norm_x, norm_x, norm_x, x_mask))
         x = x + self.drop_path(self.vl_attn(x, y, y, y_mask))
         x = x + self.drop_path(self.mlp(self.norm2(x)))
         return x
@@ -131,7 +131,7 @@ class VisionTransformer(nn.Module):
         visu_mask = visu_mask[None].float()
         visu_mask = F.interpolate(visu_mask, size=(self.embed_shape, self.embed_shape)).to(torch.bool)[0]
         
-        visu_mask_expanded = visu_mask.view(batch_size, 1, 1, self.embed_shape**2).expand(-1, self.num_heads, -1, -1)
+        visu_mask_expanded = visu_mask.view(batch_size, 1, 1, -1).expand(-1, self.num_heads, -1, -1)
         ling_mask_expanded = ling_mask.view(batch_size, 1, 1, -1).expand(-1, self.num_heads, -1, -1)
 
         for i, block in enumerate(self.blocks):
@@ -143,14 +143,14 @@ class VisionTransformer(nn.Module):
         if self.norm is not None:
             visu_src = self.norm(visu_src)
         
-        import pdb
-        pdb.set_trace()
+        reg_src = torch.mean(visu_src, dim=1)
+        # visu_mask = visu_mask.flatten(1)
+        # valid_token_num = visu_mask.float().sum(1, keepdim=True)
+
+        # reg_src = visu_src.sum(1) / (valid_token_num + 1e-12)
+
+        return reg_src
         
-        visu_src = visu_src.reshape(batch_size, self.embed_shape, self.embed_shape, -1).permute(0, 3, 1, 2)
-        out = NestedTensor(visu_src.contiguous(), visu_mask)
-
-        return out
-
     def _resize_pos_embed(self, tgt_size):
         resized_pos_embed = F.interpolate(self.pos_embed, size=tgt_size, mode='bicubic', align_corners=False)
         self.pos_embed = nn.Parameter(resized_pos_embed)
