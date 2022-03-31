@@ -116,7 +116,6 @@ def trans_vg_loss(batch_pred, batch_target):
     batch_size = batch_pred.shape[0]
     # world_size = get_world_size()
     num_boxes = batch_size
-
     loss_bbox = F.l1_loss(batch_pred, batch_target, reduction='none')
     loss_giou = 1 - torch.diag(generalized_box_iou(
         xywh2xyxy(batch_pred),

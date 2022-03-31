@@ -143,11 +143,16 @@ class VisionTransformer(nn.Module):
         if self.norm is not None:
             visu_src = self.norm(visu_src)
         
-        reg_src = torch.mean(visu_src, dim=1)
-        # visu_mask = visu_mask.flatten(1)
-        # valid_token_num = visu_mask.float().sum(1, keepdim=True)
+        visu_mask_flatten = visu_mask.flatten(1)
 
-        # reg_src = visu_src.sum(1) / (valid_token_num + 1e-12)
+        reg_src_list = []
+        for bs_ind in range(batch_size):
+            this_visu_src  = visu_src[bs_ind]
+            this_visu_mask = visu_mask_flatten[bs_ind]
+            this_visu_src  = this_visu_src[~this_visu_mask]
+            this_reg_src = torch.mean(this_visu_src, dim=0, keepdim=True)
+            reg_src_list.append(this_reg_src)
+        reg_src = torch.cat(reg_src_list, dim=0)
 
         return reg_src
         
