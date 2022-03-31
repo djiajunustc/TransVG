@@ -60,10 +60,10 @@ class VLBlock(nn.Module):
 
 class VisionTransformer(nn.Module):
     """ Vision Transformers """
-    def __init__(self, img_size=224, patch_size=16, in_chans=3, embed_dim=768, \
-                 depth=12, num_heads=12, mlp_ratio=4., qkv_bias=True, 
-                 drop_rate=0., attn_drop_rate=0., drop_path_rate=0., embed_layer=PatchEmbed, norm_layer=None, act_layer=None, 
-                 VL_LOC=[3, 6, 9]):
+    def __init__(self, img_size=224, patch_size=16, in_chans=3, embed_dim=768, depth=12, num_heads=12, \
+                 mlp_ratio=4., qkv_bias=True, drop_rate=0., attn_drop_rate=0., drop_path_rate=0., \
+                 embed_layer=PatchEmbed, norm_layer=None, act_layer=None, \
+                 vl_loc=[3, 6, 9, 10, 11], pruning_loc=[3, 6, 9], token_ratio=[0.75, 0.5, 0.25]):
         """
         Args:
             img_size (int, tuple): input image size
@@ -99,7 +99,7 @@ class VisionTransformer(nn.Module):
 
         block_list = []
         for i in range(depth):
-            if i in VL_LOC:
+            if i in vl_loc:
                 block_list.append(
                     VLBlock(dim=embed_dim, num_heads=num_heads,
                             mlp_ratio=mlp_ratio, qkv_bias=qkv_bias,
@@ -118,15 +118,15 @@ class VisionTransformer(nn.Module):
         self.blocks = nn.ModuleList(block_list)
         self.norm = norm_layer(embed_dim)
 
-        self.vl_location = VL_LOC
+        self.vl_location = vl_loc
     
     def forward(self, visu_src, ling_src, visu_mask, ling_mask):
         batch_size = visu_src.shape[0]
 
         visu_src = self.patch_embed(visu_src)
         visu_src = self.pos_drop(visu_src + self.pos_embed)
+        
         visu_src = visu_src.flatten(2).transpose(1, 2)
-        # visu_size = int(math.sqrt(visu_src.shape[1]))
         
         visu_mask = visu_mask[None].float()
         visu_mask = F.interpolate(visu_mask, size=(self.embed_shape, self.embed_shape)).to(torch.bool)[0]
