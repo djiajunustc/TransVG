@@ -169,7 +169,6 @@ def build_visual_branch(args):
                         embed_dim=embed_dim, depth=12, num_heads=num_heads, \
                         mlp_ratio=4, qkv_bias=True, \
                         norm_layer=partial(nn.LayerNorm, eps=1e-6), \
-                        embed_layer=partial(PatchEmbed, flatten=False), \
-                        VL_LOC=[3,6,9])
+                        embed_layer=partial(PatchEmbed, flatten=False))
 
     return model
