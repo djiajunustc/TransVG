@@ -1,7 +1,11 @@
 export CUDA_VISIBLE_DEVICES=0,1,2,3
 
 # # RefCOCOg g-split
-python -m torch.distributed.launch --nproc_per_node=4 --use_env train.py --batch_size 16 --bert_model bert-base-uncased --vit_model tiny --visual_model_stride 32 --lr_bert 0.00001 --dataset gref --aug_scale --aug_crop --aug_translate --visual_pretrained ../DETR-Models/detr_vit_tiny_for_transvg_640_no_window.pth --vl_hidden_dim 192 --vl_depth 3 --max_query_len 40 --output_dir outputs/2022_03_28/refcocog_gsplit_vit_tiny_cross_lang_depth3_no_rt --imsize 640 --epochs 90 --lr_drop 60 --without_reg_token --separate_qkv
+# python -m torch.distributed.launch --nproc_per_node=8 --use_env train.py --batch_size 16 --bert_model bert-base-uncased --vit_model small --visual_model_stride 32 --lr_bert 0.00001 --dataset gref --aug_scale --aug_crop --aug_translate --visual_pretrained ../DETR-Models/detr_vit_small_for_transvg_640_no_window.pth --vl_hidden_dim 384 --max_query_len 40 --output_dir outputs/2022_03_31/refcocog_gsplit_lvit_small_no_rt --imsize 640 --epochs 90 --lr_drop 60 --without_reg_token --separate_qkv
+
+python -m torch.distributed.launch --nproc_per_node=4 --use_env train.py --batch_size 16 --bert_model bert-base-uncased --vit_model tiny --visual_model_stride 32 --lr_bert 0.00001 --dataset gref --aug_scale --aug_crop --aug_translate --visual_pretrained ../DETR-Models/detr_vit_tiny_for_transvg_640_no_window.pth --vl_hidden_dim 192 --max_query_len 40 --output_dir outputs/2022_04_01/refcocog_gsplit_lvit_tiny_avg_valid --imsize 640 --epochs 90 --lr_drop 60 --without_reg_token --separate_qkv --avg_valid_tokens
+
+# python train.py --batch_size 16 --bert_model bert-base-uncased --vit_model tiny --visual_model_stride 32 --lr_bert 0.00001 --dataset gref --aug_scale --aug_crop --aug_translate --visual_pretrained ../DETR-Models/detr_vit_tiny_for_transvg_640_no_window.pth --vl_hidden_dim 192 --max_query_len 40 --output_dir outputs/2022_03_31/refcocog_gsplit_lvit_tiny_no_rt --imsize 640 --epochs 90 --lr_drop 60 --without_reg_token --separate_qkv
 
 
 # python train.py --batch_size 16 --bert_model bert-base-uncased --vit_model tiny --visual_model_stride 32 --lr_bert 0.00001 --dataset gref --aug_scale --aug_crop --aug_translate --visual_pretrained ../DETR-Models/detr_vit_tiny_for_transvg_640_no_window.pth --vl_hidden_dim 192 --vl_depth 3 --max_query_len 40 --output_dir outputs/2022_03_28/refcocog_gsplit_vit_tiny_cross_lang_depth3_no_rt --imsize 640 --epochs 90 --lr_drop 60 --without_reg_token --separate_qkv

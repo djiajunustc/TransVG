@@ -63,7 +63,7 @@ class VisionTransformer(nn.Module):
     def __init__(self, img_size=224, patch_size=16, in_chans=3, embed_dim=768, depth=12, num_heads=12, \
                  mlp_ratio=4., qkv_bias=True, drop_rate=0., attn_drop_rate=0., drop_path_rate=0., \
                  embed_layer=PatchEmbed, norm_layer=None, act_layer=None, \
-                 vl_loc=[3, 6, 9, 10, 11], pruning_loc=[3, 6, 9], token_ratio=[0.75, 0.5, 0.25]):
+                 vl_loc=[3, 6, 9], avg_valid_tokens=False):
         """
         Args:
             img_size (int, tuple): input image size
@@ -119,6 +119,7 @@ class VisionTransformer(nn.Module):
         self.norm = norm_layer(embed_dim)
 
         self.vl_location = vl_loc
+        self.avg_valid_tokens = avg_valid_tokens
     
     def forward(self, visu_src, ling_src, visu_mask, ling_mask):
         batch_size = visu_src.shape[0]
@@ -143,16 +144,18 @@ class VisionTransformer(nn.Module):
         if self.norm is not None:
             visu_src = self.norm(visu_src)
         
-        visu_mask_flatten = visu_mask.flatten(1)
-
-        reg_src_list = []
-        for bs_ind in range(batch_size):
-            this_visu_src  = visu_src[bs_ind]
-            this_visu_mask = visu_mask_flatten[bs_ind]
-            this_visu_src  = this_visu_src[~this_visu_mask]
-            this_reg_src = torch.mean(this_visu_src, dim=0, keepdim=True)
-            reg_src_list.append(this_reg_src)
-        reg_src = torch.cat(reg_src_list, dim=0)
+        if self.avg_valid_tokens:
+            visu_mask_flatten = visu_mask.flatten(1)
+            reg_src_list = []
+            for bs_ind in range(batch_size):
+                this_visu_src  = visu_src[bs_ind]
+                this_visu_mask = visu_mask_flatten[bs_ind]
+                this_visu_src  = this_visu_src[~this_visu_mask]
+                this_reg_src = torch.mean(this_visu_src, dim=0, keepdim=True)
+                reg_src_list.append(this_reg_src)
+            reg_src = torch.cat(reg_src_list, dim=0)
+        else:
+            reg_src = visu_src.mean(dim=1)
 
         return reg_src
         
@@ -174,6 +177,7 @@ def build_visual_branch(args):
                         embed_dim=embed_dim, depth=12, num_heads=num_heads, \
                         mlp_ratio=4, qkv_bias=True, \
                         norm_layer=partial(nn.LayerNorm, eps=1e-6), \
-                        embed_layer=partial(PatchEmbed, flatten=False))
+                        embed_layer=partial(PatchEmbed, flatten=False),
+                        avg_valid_tokens=args.avg_valid_tokens)
 
     return model

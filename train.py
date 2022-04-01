@@ -97,6 +97,7 @@ def get_args_parser():
                         help='Number of encoders in the vision-language transformer')
     parser.add_argument('--vl_normalize_before', action='store_true')
     parser.add_argument('--vl_activation', default='relu', type=str)
+    parser.add_argument('--avg_valid_tokens', action='store_true')
 
     # Dataset parameters
     parser.add_argument('--data_root', type=str, default='./ln_data/',
