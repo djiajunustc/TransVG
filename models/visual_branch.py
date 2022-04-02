@@ -31,7 +31,7 @@ class VisualBlock(nn.Module):
         return x
 
 
-class VLBlock(nn.Module):
+class VisualLinguisticBlock(nn.Module):
 
     def __init__(self, dim, num_heads, mlp_ratio=4., qkv_bias=False, 
                  drop=0., attn_drop=0., drop_path=0., act_layer=nn.GELU, 
@@ -58,12 +58,35 @@ class VLBlock(nn.Module):
         return x
 
 
+class REGTokenBlock(nn.Module):
+
+    def __init__(self, dim, num_heads, mlp_ratio=4., qkv_bias=False, 
+                 drop=0., attn_drop=0., drop_path=0., act_layer=nn.GELU, 
+                 norm_layer=nn.LayerNorm):
+        super().__init__()
+        self.norm1 = norm_layer(dim)
+        self.l_attn = AttentionV2(dim, num_heads=num_heads, qkv_bias=qkv_bias, attn_drop=attn_drop, proj_drop=drop)
+        self.v_attn = AttentionV2(dim, num_heads=num_heads, qkv_bias=qkv_bias, attn_drop=attn_drop, proj_drop=drop)
+        # NOTE: drop path for stochastic depth, we shall see if this is better than dropout here
+        self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
+        self.norm2 = norm_layer(dim)
+        mlp_hidden_dim = int(dim * mlp_ratio)
+        self.mlp = Mlp(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop)
+
+    def forward(self, x, visu_y, ling_y, visu_mask, ling_mask):
+        norm_x = self.norm1(x)
+        x = x + self.drop_path(self.l_attn(norm_x, ling_y, ling_y, ling_mask))
+        x = x + self.drop_path(self.v_attn(x, visu_y, visu_y, visu_mask))
+        x = x + self.drop_path(self.mlp(self.norm2(x)))
+        return x
+
+
 class VisionTransformer(nn.Module):
     """ Vision Transformers """
     def __init__(self, img_size=224, patch_size=16, in_chans=3, embed_dim=768, depth=12, num_heads=12, \
                  mlp_ratio=4., qkv_bias=True, drop_rate=0., attn_drop_rate=0., drop_path_rate=0., \
                  embed_layer=PatchEmbed, norm_layer=None, act_layer=None, \
-                 vl_loc=[3, 6, 9], avg_valid_tokens=False):
+                 vl_loc=[2, 5, 8, 11], avg_valid_tokens=False):
         """
         Args:
             img_size (int, tuple): input image size
@@ -95,17 +118,27 @@ class VisionTransformer(nn.Module):
         self.pos_embed = nn.Parameter(torch.zeros(1, embed_dim, self.embed_shape, self.embed_shape))
         self.pos_drop = nn.Dropout(p=drop_rate)
 
+        self.reg_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
+
         dpr = [x.item() for x in torch.linspace(0, drop_path_rate, depth)]  # stochastic depth decay rule
 
         block_list = []
+        reg_block_list = []
         for i in range(depth):
             if i in vl_loc:
                 block_list.append(
-                    VLBlock(dim=embed_dim, num_heads=num_heads,
-                            mlp_ratio=mlp_ratio, qkv_bias=qkv_bias,
-                            drop=drop_rate, attn_drop=attn_drop_rate,
-                            drop_path=dpr[i], norm_layer=norm_layer,
-                            act_layer=act_layer)
+                    VisualLinguisticBlock(dim=embed_dim, num_heads=num_heads,
+                                          mlp_ratio=mlp_ratio, qkv_bias=qkv_bias,
+                                          drop=drop_rate, attn_drop=attn_drop_rate,
+                                          drop_path=dpr[i], norm_layer=norm_layer,
+                                          act_layer=act_layer)
+                )
+                reg_block_list.append(
+                    REGTokenBlock(dim=embed_dim, num_heads=num_heads,
+                                  mlp_ratio=mlp_ratio, qkv_bias=qkv_bias,
+                                  drop=drop_rate, attn_drop=attn_drop_rate,
+                                  drop_path=dpr[i], norm_layer=norm_layer,
+                                          act_layer=act_layer)
                 )
             else:
                 block_list.append(
@@ -115,11 +148,20 @@ class VisionTransformer(nn.Module):
                                 drop_path=dpr[i], norm_layer=norm_layer, 
                                 act_layer=act_layer)    
                 )
+                
         self.blocks = nn.ModuleList(block_list)
+        self.reg_blocks = nn.ModuleList(reg_block_list)
         self.norm = norm_layer(embed_dim)
 
         self.vl_location = vl_loc
         self.avg_valid_tokens = avg_valid_tokens
+
+        self._reset_parameters()
+    
+    def _reset_parameters(self):
+        for p in self.parameters():
+            if p.dim() > 1:
+                nn.init.xavier_uniform_(p)
     
     def forward(self, visu_src, ling_src, visu_mask, ling_mask):
         batch_size = visu_src.shape[0]
@@ -135,27 +177,33 @@ class VisionTransformer(nn.Module):
         visu_mask_expanded = visu_mask.view(batch_size, 1, 1, -1).expand(-1, self.num_heads, -1, -1)
         ling_mask_expanded = ling_mask.view(batch_size, 1, 1, -1).expand(-1, self.num_heads, -1, -1)
 
+        reg_src = self.reg_token.expand(batch_size, -1, -1)
+        r_count = 0
         for i, block in enumerate(self.blocks):
             if i in self.vl_location:
                 visu_src = block(visu_src, ling_src, visu_mask_expanded, ling_mask_expanded)
+                reg_src  = self.reg_blocks[r_count](reg_src, visu_src, ling_src, visu_mask_expanded, ling_mask_expanded)
+                r_count += 1
             else:
                 visu_src = block(visu_src, visu_mask_expanded)
 
-        if self.norm is not None:
-            visu_src = self.norm(visu_src)
+        # if self.norm is not None:
+        #     visu_src = self.norm(visu_src)
         
-        if self.avg_valid_tokens:
-            visu_mask_flatten = visu_mask.flatten(1)
-            reg_src_list = []
-            for bs_ind in range(batch_size):
-                this_visu_src  = visu_src[bs_ind]
-                this_visu_mask = visu_mask_flatten[bs_ind]
-                this_visu_src  = this_visu_src[~this_visu_mask]
-                this_reg_src = torch.mean(this_visu_src, dim=0, keepdim=True)
-                reg_src_list.append(this_reg_src)
-            reg_src = torch.cat(reg_src_list, dim=0)
-        else:
-            reg_src = visu_src.mean(dim=1)
+        # if self.avg_valid_tokens:
+        #     visu_mask_flatten = visu_mask.flatten(1)
+        #     reg_src_list = []
+        #     for bs_ind in range(batch_size):
+        #         this_visu_src  = visu_src[bs_ind]
+        #         this_visu_mask = visu_mask_flatten[bs_ind]
+        #         this_visu_src  = this_visu_src[~this_visu_mask]
+        #         this_reg_src = torch.mean(this_visu_src, dim=0, keepdim=True)
+        #         reg_src_list.append(this_reg_src)
+        #     reg_src = torch.cat(reg_src_list, dim=0)
+        # else:
+        #     reg_src = visu_src.mean(dim=1)
+        
+        reg_src = reg_src.squeeze(1)
 
         return reg_src
         
