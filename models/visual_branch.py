@@ -226,6 +226,7 @@ def build_visual_branch(args):
                         mlp_ratio=4, qkv_bias=True, \
                         norm_layer=partial(nn.LayerNorm, eps=1e-6), \
                         embed_layer=partial(PatchEmbed, flatten=False),
-                        avg_valid_tokens=args.avg_valid_tokens)
+                        avg_valid_tokens=args.avg_valid_tokens,
+                        vl_loc=args.vl_loc)
 
     return model

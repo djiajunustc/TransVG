@@ -98,6 +98,8 @@ def get_args_parser():
     parser.add_argument('--vl_normalize_before', action='store_true')
     parser.add_argument('--vl_activation', default='relu', type=str)
     parser.add_argument('--avg_valid_tokens', action='store_true')
+    parser.add_argument('--vl_loc', type=int, nargs='+', default=[2, 5, 8, 11], 
+                        help='location in ViT to integrate linguistic feature')
 
     # Dataset parameters
     parser.add_argument('--data_root', type=str, default='./ln_data/',
