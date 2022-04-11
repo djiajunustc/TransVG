@@ -53,24 +53,8 @@ def get_args_parser():
                         help="Name of the convolutional backbone to use")
     parser.add_argument('--dilation', action='store_true',
                         help="If true, we replace stride with dilation in the last convolutional block (DC5)")
-    parser.add_argument('--position_embedding', default='sine', type=str, choices=('sine', 'learned'), help="Type of positional embedding to use on top of the image features")
-    # * Transformer
-    # parser.add_argument('--enc_layers', default=6, type=int,
-    #                     help="Number of encoding layers in the transformer")
-    # parser.add_argument('--dec_layers', default=0, type=int,
-    #                     help="Number of decoding layers in the transformer")
-    # parser.add_argument('--dim_feedforward', default=2048, type=int,
-    #                     help="Intermediate size of the feedforward layers in the transformer blocks")
-    # parser.add_argument('--hidden_dim', default=256, type=int,
-    #                     help="Size of the embeddings (dimension of the transformer)")
-    # parser.add_argument('--dropout', default=0.1, type=float,
-    #                     help="Dropout applied in the transformer")
-    # parser.add_argument('--nheads', default=8, type=int,
-    #                     help="Number of attention heads inside the transformer's attentions")
-    # parser.add_argument('--num_queries', default=100, type=int,
-    #                     help="Number of query slots")
-    # parser.add_argument('--pre_norm', action='store_true')
-
+    parser.add_argument('--position_embedding', default='sine', type=str, choices=('sine', 'learned'), 
+                        help="Type of positional embedding to use on top of the image features")
     parser.add_argument('--imsize', default=640, type=int, help='image size')
     parser.add_argument('--visual_model_stride', default=32, type=int, help='stride of vision feature')
     parser.add_argument('--emb_size', default=512, type=int,
@@ -99,7 +83,8 @@ def get_args_parser():
     parser.add_argument('--avg_valid_tokens', action='store_true')
     parser.add_argument('--vl_loc', type=int, nargs='+', default=[2, 5, 8, 11], 
                         help='location in ViT to integrate linguistic feature')
-    parser.add_argument('--reg_out_type', default='reg_input', type=str, help='option for output regression source feature')
+    parser.add_argument('--reg_out_type', default='reg_input', type=str, 
+                        help='option for output regression source feature')
 
     # Dataset parameters
     parser.add_argument('--data_root', type=str, default='./ln_data/',
@@ -118,9 +103,9 @@ def get_args_parser():
     parser.add_argument('--seed', default=13, type=int)
     parser.add_argument('--resume', default='', help='resume from checkpoint')
     parser.add_argument('--visual_pretrained', default='./saved_models/detr-r50.pth', type=str, help='detr model')
+    parser.add_argument('--pretrained_lm_path', default='../Language-Models', type=str, 
+                        help='root path at which we save language models')
 
-
-    parser.add_argument('--light', dest='light', default=False, action='store_true', help='if use smaller model')
     parser.add_argument('--start_epoch', default=0, type=int, metavar='N',
                         help='start epoch')
     parser.add_argument('--num_workers', default=2, type=int)
