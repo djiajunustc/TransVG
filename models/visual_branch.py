@@ -214,19 +214,25 @@ class VisionTransformer(nn.Module):
 
 def build_visual_branch(args):
     if args.vit_model == 'tiny':
-        embed_dim, num_heads = 192, 3
+        embed_dim, num_heads, mlp_ratio = 192, 3, 4
     elif args.vit_model == 'small':
-        embed_dim, num_heads = 384, 6
+        embed_dim, num_heads, mlp_ratio = 384, 6, 4
     elif args.vit_model == 'base':
-        embed_dim, num_heads = 768, 12
+        embed_dim, num_heads, mlp_ratio = 768, 12, 4
+    elif args.vit_model == 'detr_like':
+        embed_dim, num_heads, mlp_ratio = 256, 8, 8
     
-    # embed_shape2d = [int(args.imsize//16) for _ in range(2)]
-    model = VisionTransformer(img_size=args.imsize, patch_size=16, \
-                        embed_dim=embed_dim, depth=12, num_heads=num_heads, \
-                        mlp_ratio=4, qkv_bias=True, \
-                        norm_layer=partial(nn.LayerNorm, eps=1e-6), \
-                        embed_layer=partial(PatchEmbed, flatten=False),
-                        avg_valid_tokens=args.avg_valid_tokens,
-                        vl_loc=args.vl_loc)
+    model = VisionTransformer(img_size=args.imsize, 
+                              patch_size=16, \
+                              embed_dim=embed_dim, 
+                              depth=12, 
+                              num_heads=num_heads, \
+                              mlp_ratio=mlp_ratio, 
+                              qkv_bias=True, \
+                              norm_layer=partial(nn.LayerNorm, eps=1e-6), \
+                              embed_layer=partial(PatchEmbed, flatten=False),
+                              avg_valid_tokens=args.avg_valid_tokens,
+                              vl_loc=args.vl_loc)
+
 
     return model

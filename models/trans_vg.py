@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from .visual_branch_v3 import build_visual_branch_v3
+from .visual_branch_v2 import build_visual_branch_v2
 from .visual_branch import build_visual_branch
 from .linguistic_branch import build_linguistic_branch
 
@@ -12,7 +14,13 @@ class TransVG(nn.Module):
         hidden_dim = args.vl_hidden_dim
         
         self.linguistic_branch = build_linguistic_branch(args)
-        self.visual_branch = build_visual_branch(args)
+        
+        if args.reg_out_type == 'reg_out':
+            self.visual_branch = build_visual_branch(args)
+        elif args.reg_out_type == 'reg_input':
+            self.visual_branch = build_visual_branch_v3(args)
+        else:
+            self.visual_branch = build_visual_branch_v2(args)
 
         self.text_proj = nn.Linear(self.linguistic_branch.num_channels, hidden_dim)
 
