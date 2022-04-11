@@ -65,5 +65,6 @@ def build_dataset(split, args):
                         split=split,
                         transform=make_transforms(args, split),
                         max_query_len=args.max_query_len,
+                        pretrained_lm_path=args.pretrained_lm_path,
                         bert_model=args.bert_model
                         )

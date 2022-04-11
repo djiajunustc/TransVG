@@ -21,7 +21,8 @@ import torch.utils.data as data
 sys.path.append('.')
 
 from PIL import Image
-from transformers import AutoTokenizer
+# from transformers import AutoTokenizer
+from transformers import RobertaTokenizerFast, BertTokenizer
 # from pytorch_pretrained_bert.tokenization import BertTokenizer
 from utils.word_utils import Corpus
 
@@ -152,7 +153,9 @@ class TransVGDataset(data.Dataset):
     def __init__(self, data_root, split_root='data', dataset='referit', 
                  transform=None, return_idx=False, testmode=False,
                  split='train', max_query_len=128, lstm=False, 
+                 pretrained_lm_path='../Language-Models',
                  bert_model='bert-base-uncased'):
+
         self.images = []
         self.data_root = data_root
         self.split_root = split_root
@@ -162,7 +165,14 @@ class TransVGDataset(data.Dataset):
         self.transform = transform
         self.testmode = testmode
         self.split = split
-        self.tokenizer = AutoTokenizer.from_pretrained(bert_model, do_lower_case=True)
+        if bert_model == 'bert-base-uncased':
+            self.tokenizer = BertTokenizer.from_pretrained(pretrained_lm_path + '/' + bert_model, do_lower_case=True)
+        elif bert_model == 'roberta-base':
+            self.tokenizer = RobertaTokenizerFast.from_pretrained(pretrained_lm_path + '/' + bert_model)
+        else:
+            raise ValueError('Only support bert-base-uncased or roberta-base')
+
+        # self.tokenizer = AutoTokenizer.from_pretrained(bert_model, do_lower_case=True)
         # self.tokenizer = BertTokenizer.from_pretrained(bert_model, do_lower_case=True)
         self.return_idx=return_idx
 
