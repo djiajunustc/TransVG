@@ -82,7 +82,6 @@ def get_args_parser():
     parser.add_argument('--bert_model', default='bert-base-uncased', type=str, help='bert model')
     parser.add_argument('--vit_model', default='small', type=str, help='vit model')
     parser.add_argument('--separate_qkv', action='store_true')
-    parser.add_argument('--without_reg_token', action='store_true')
 
     # Vision-Language Transformer
     parser.add_argument('--vl_dropout', default=0.1, type=float,
@@ -100,6 +99,7 @@ def get_args_parser():
     parser.add_argument('--avg_valid_tokens', action='store_true')
     parser.add_argument('--vl_loc', type=int, nargs='+', default=[2, 5, 8, 11], 
                         help='location in ViT to integrate linguistic feature')
+    parser.add_argument('--reg_out_type', default='reg_input', type=str, help='option for output regression source feature')
 
     # Dataset parameters
     parser.add_argument('--data_root', type=str, default='./ln_data/',
