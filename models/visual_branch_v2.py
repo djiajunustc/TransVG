@@ -227,7 +227,7 @@ def build_visual_branch_v2(args):
                               qkv_bias=True, \
                               norm_layer=partial(nn.LayerNorm, eps=1e-6), \
                               embed_layer=partial(PatchEmbed, flatten=False),
-                              avg_valid_tokens=args.avg_valid_tokens,
+                              reg_out_type=args.reg_out_type,
                               vl_loc=args.vl_loc)
 
 

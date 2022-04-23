@@ -85,6 +85,7 @@ def get_args_parser():
                         help='location in ViT to integrate linguistic feature')
     parser.add_argument('--reg_out_type', default='reg_input', type=str, 
                         help='option for output regression source feature')
+    parser.add_argument('--prompt_tuning', action='store_true')
 
     # Dataset parameters
     parser.add_argument('--data_root', type=str, default='./ln_data/',
