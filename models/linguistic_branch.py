@@ -18,12 +18,20 @@ class LinguisticModel(nn.Module):
         self.num_channels = 768
 
         self.embeddings = pretrained_backbone.embeddings
-        self.encoder = pretrained_backbone.encoder
+        
+        encoder_layers = []
+        for i in range(len(pretrained_backbone.encoder.layer)):
+            encoder_layers.append(pretrained_backbone.encoder.layer[i])
+        self.encoder = nn.ModuleList(encoder_layers)
+
+        # self.encoder = pretrained_backbone.encoder
         # self.pooler = pretrained_backbone.pooler
         
         if self.prompt_tuning:
-            self.prompt_tokens = nn.Parameter(torch.zeros(1, 20, self.num_channels))
-            nn.init.normal_(self.prompt_tokens, std=1e-6)
+            self.num_prompt_tokens = 8
+            self.prompt_tokens = nn.Parameter(torch.zeros(len(self.encoder), self.num_prompt_tokens, self.num_channels))
+            # self.prompt_tokens = nn.Parameter(torch.zeros(1, self.num_prompt_tokens, self.num_channels))
+            nn.init.normal_(self.prompt_tokens, std=0.02)
         
         self._freeze_params()
 
@@ -40,20 +48,29 @@ class LinguisticModel(nn.Module):
     def forward(self, tensor_list: NestedTensor):
         ling_src, ling_mask = tensor_list.decompose()
         ling_src = self.embeddings(ling_src)
-
-        if self.prompt_tuning:
-            batch_size = ling_src.shape[0]
-            prompt_src  = self.prompt_tokens.expand(batch_size, -1, -1)
-            prompt_mask = torch.ones(batch_size, 20, dtype=ling_mask.dtype, device=ling_src.device)
-
-            ling_src  = torch.cat([ling_src, prompt_src], dim=1)
-            ling_mask = torch.cat([ling_mask, prompt_mask], dim=1)
         
-        extended_mask = ling_mask[:, None, None, :]
-        outputs = self.encoder(ling_src, attention_mask=extended_mask)
+        if self.prompt_tuning:
+            batch_size, num_src, C = ling_src.shape
+            prompt_mask = torch.ones(batch_size, self.num_prompt_tokens, dtype=ling_mask.dtype, device=ling_src.device)
+            extended_mask = torch.cat([ling_mask, prompt_mask], dim=1)
+            extended_mask = extended_mask[:, None, None, :]
+            outputs = ling_src
+            for i, layer in enumerate(self.encoder):
+                prompt_src = self.prompt_tokens[i:i+1].expand(batch_size, -1, -1)
+                outputs = torch.cat([outputs, prompt_src], dim=1)
+                outputs = layer(outputs, attention_mask=extended_mask)[0]
+                outputs = outputs[:, :num_src, :]
 
-        xs = outputs.last_hidden_state
+        else:
+            extended_mask = ling_mask[:, None, None, :]
+            outputs = ling_src
+            for layer in self.encoder:
+                outputs = layer(outputs, attention_mask=extended_mask)[0]
+            # outputs = self.encoder(ling_src, attention_mask=extended_mask)
 
+        xs = outputs
+        # xs = outputs.last_hidden_state
+        
         # mask = tensor_list.mask.to(torch.bool)
         mask = ling_mask.to(torch.bool)
         mask = ~mask

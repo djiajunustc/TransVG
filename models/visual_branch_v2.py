@@ -58,6 +58,35 @@ class VLBlock(nn.Module):
         return x
 
 
+class VLBlock_v2(nn.Module):
+
+    def __init__(self, dim, num_heads, mlp_ratio=4., qkv_bias=False, 
+                 drop=0., attn_drop=0., drop_path=0., act_layer=nn.GELU, 
+                 norm_layer=nn.LayerNorm):
+        super().__init__()
+        self.norm1 = norm_layer(dim)
+        self.attn = AttentionV2(dim, num_heads=num_heads, qkv_bias=qkv_bias, attn_drop=attn_drop, proj_drop=drop)
+        # NOTE: drop path for stochastic depth, we shall see if this is better than dropout here
+        self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
+        self.norm2 = norm_layer(dim)
+        mlp_hidden_dim = int(dim * mlp_ratio)
+        self.mlp = Mlp(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop)
+
+        # v-l attn
+        self.vl_attn = AttentionV2(dim, num_heads=num_heads, qkv_bias=qkv_bias, attn_drop=attn_drop, proj_drop=drop)
+        self.norm3 = norm_layer(dim)
+
+
+    def forward(self, x, y, x_mask, y_mask):
+        norm_x = self.norm1(x)
+        x = x + self.drop_path(self.attn(norm_x, norm_x, norm_x, x_mask))
+        x = x + self.drop_path(self.mlp(self.norm2(x)))
+        norm_x = self.norm3(x)
+        x = x + self.drop_path(self.vl_attn(norm_x, y, y, y_mask))
+        # x = x + self.drop_path(self.mlp(self.norm2(x)))
+        return x
+
+
 class REGTokenBlock(nn.Module):
 
     def __init__(self, dim, num_heads, mlp_ratio=4., qkv_bias=False, 
