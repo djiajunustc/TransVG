@@ -210,6 +210,7 @@ class VisionTransformer(nn.Module):
                  reg_out_type='reg_token',
                  language_modulation='cross_attn',
                  modulation_loc=[8, 9, 10, 11], 
+                 without_visual_mask=False
                  ):
         """
         Args:
@@ -233,6 +234,7 @@ class VisionTransformer(nn.Module):
         self.num_heads = num_heads
         self.modulation_loc = modulation_loc
         self.reg_out_type = reg_out_type
+        self.without_visual_mask = without_visual_mask
 
         norm_layer = partial(nn.LayerNorm, eps=1e-6)
         act_layer = nn.GELU
@@ -303,6 +305,9 @@ class VisionTransformer(nn.Module):
 
         visu_mask_expanded = visu_mask.view(batch_size, 1, 1, -1).expand(-1, self.num_heads, -1, -1)
         ling_mask_expanded = ling_mask.view(batch_size, 1, 1, -1).expand(-1, self.num_heads, -1, -1)
+        
+        if self.without_visual_mask:
+            visu_mask_expanded = None
 
         for i, block in enumerate(self.blocks):
             if i in self.modulation_loc:
@@ -333,6 +338,9 @@ class VisionTransformer(nn.Module):
         visu_mask_expanded = visu_mask.view(batch_size, 1, 1, -1).expand(-1, self.num_heads, -1, -1)
         ling_mask_expanded = ling_mask.view(batch_size, 1, 1, -1).expand(-1, self.num_heads, -1, -1)
 
+        if self.without_visual_mask:
+            visu_mask_expanded = None
+            
         for i, block in enumerate(self.blocks):
             if i in self.modulation_loc:
                 visu_src = block(visu_src, ling_src, visu_mask_expanded, ling_mask_expanded)
@@ -381,7 +389,8 @@ def build_visual_branch(args):
                               reg_out_type=args.reg_out_type,
                               use_block_v2=args.use_block_v2,
                               modulation_loc=args.modulation_loc,
-                              language_modulation=args.language_modulation
+                              language_modulation=args.language_modulation,
+                              without_visual_mask=args.without_visual_mask
                               )
 
     return model
