@@ -81,11 +81,14 @@ def get_args_parser():
     parser.add_argument('--vl_normalize_before', action='store_true')
     parser.add_argument('--vl_activation', default='relu', type=str)
     parser.add_argument('--avg_valid_tokens', action='store_true')
-    parser.add_argument('--vl_loc', type=int, nargs='+', default=[2, 5, 8, 11], 
+    parser.add_argument('--modulation_loc', type=int, nargs='+', default=[8, 9, 10, 11], 
                         help='location in ViT to integrate linguistic feature')
     parser.add_argument('--reg_out_type', default='reg_input', type=str, 
                         help='option for output regression source feature')
     parser.add_argument('--prompt_tuning', action='store_true')
+    parser.add_argument('--use_block_v2', action='store_true')
+    parser.add_argument('--langauge_modulation', type=str, default='cross_attn',
+                        help='language_modulation should be one of ["cross_attn", "concat_linear", "cls_token"]')
 
     # Dataset parameters
     parser.add_argument('--data_root', type=str, default='./ln_data/',
@@ -135,7 +138,7 @@ def main(args):
 
     model_without_ddp = model
     if args.distributed:
-        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], find_unused_parameters=True)
+        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], find_unused_parameters=False)
         model_without_ddp = model.module
     n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print('number of params:', n_parameters)
