@@ -80,12 +80,14 @@ class LinguisticModel(nn.Module):
 
 def build_linguistic_branch(args):
     
-    if args.bert_model == 'bert-base-uncased':
-        bert_model = BertModel
-    elif args.bert_model == 'roberta-base':
-        bert_model = RobertaModel
-    else:
-        raise ValueError('Only support bert-base-uncased or roberta-base')
+    # if args.bert_model == 'bert-base-uncased':
+    #     bert_model = BertModel
+    # elif args.bert_model == 'roberta-base':
+    #     bert_model = RobertaModel
+    # else:
+    #     raise ValueError('Only support bert-base-uncased or roberta-base')
+    assert args.bert_model == 'roberta-base'
+    bert_model = RobertaModel
 
     bert_model = bert_model.from_pretrained(args.pretrained_lm_path + '/' + args.bert_model)
     # is_freeze = args.lr_bert == 0

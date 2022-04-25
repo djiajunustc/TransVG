@@ -63,7 +63,7 @@ def get_args_parser():
     # Transformers in two branches
     parser.add_argument('--bert_enc_num', default=12, type=int)
     parser.add_argument('--detr_enc_num', default=0, type=int)
-    parser.add_argument('--bert_model', default='bert-base-uncased', type=str, help='bert model')
+    parser.add_argument('--bert_model', default='roberta-base', type=str, help='bert model')
     parser.add_argument('--vit_model', default='small', type=str, help='vit model')
     parser.add_argument('--separate_qkv', action='store_true')
 
@@ -87,7 +87,7 @@ def get_args_parser():
                         help='option for output regression source feature')
     parser.add_argument('--prompt_tuning', action='store_true')
     parser.add_argument('--use_block_v2', action='store_true')
-    parser.add_argument('--langauge_modulation', type=str, default='cross_attn',
+    parser.add_argument('--language_modulation', type=str, default='cross_attn',
                         help='language_modulation should be one of ["cross_attn", "concat_linear", "cls_token"]')
 
     # Dataset parameters
