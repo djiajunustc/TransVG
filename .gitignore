@@ -15,3 +15,4 @@ outputs
 saved_models
 ln_data
 data
+exp.sh
