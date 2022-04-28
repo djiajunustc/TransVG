@@ -192,6 +192,60 @@ class Block_v2(nn.Module):
         return x
 
 
+class Block_v3(nn.Module):
+
+    def __init__(self, 
+                 dim, 
+                 num_heads, 
+                 mlp_ratio=4., 
+                 qkv_bias=False, 
+                 drop=0., 
+                 attn_drop=0., 
+                 drop_path=0., 
+                 act_layer=nn.GELU, 
+                 norm_layer=nn.LayerNorm,
+                 language_modulation=None,
+                 ):
+        super().__init__()
+        self.norm1 = norm_layer(dim)
+        self.attn = AttentionV2(dim, num_heads=num_heads, qkv_bias=qkv_bias, attn_drop=attn_drop, proj_drop=drop)
+        # NOTE: drop path for stochastic depth, we shall see if this is better than dropout here
+        self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
+        self.norm2 = norm_layer(dim)
+        mlp_hidden_dim = int(dim * mlp_ratio)
+        self.mlp = Mlp(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop)
+
+        self.language_modulation= language_modulation
+        if self.language_modulation is not None:
+            if self.language_modulation == 'cross_attn':
+                self.norm3 = norm_layer(dim)
+                self.lang_modulation = AttentionV2(dim, num_heads=num_heads, qkv_bias=qkv_bias, attn_drop=attn_drop, proj_drop=drop)
+            elif self.language_modulation == 'concat_linear':
+                self.lang_modulation = ConcatLinearModulation(dim=dim, mlp_ratio=mlp_ratio, act_layer=act_layer, norm_layer=norm_layer)
+            elif self.language_modulation == 'cls_token':
+                self.lang_modulation = ClsTokenModulation(dim=dim, mlp_ratio=mlp_ratio, act_layer=act_layer, norm_layer=norm_layer)
+            else:
+                raise ValueError('language_modulation can only be one of ["cross_attn", "concat_linear", "cls_token"]')
+
+    def forward(self, x, y=None, x_attn_mask=None, y_attn_mask=None):
+        norm_x = self.norm1(x)
+        x = x + self.drop_path(self.attn(norm_x, norm_x, norm_x, x_attn_mask))
+        
+        if self.language_modulation is not None:
+            assert y is not None
+        
+        if self.language_modulation == 'cross_attn':
+            x = x + self.drop_path(self.lang_modulation(self.norm3(x), y, y, y_attn_mask))
+        elif self.language_modulation == 'concat_linear':
+            x = x + self.drop_path(self.lang_modulation(x, y))
+        elif self.language_modulation == 'cls_token':
+            x = x + self.drop_path(self.lang_modulation(y))
+        
+        x = x + self.drop_path(self.mlp(self.norm2(x)))
+        
+        return x
+
+
 class VisionTransformer(nn.Module):
     """ Vision Transformers """
     def __init__(self, 
@@ -209,8 +263,9 @@ class VisionTransformer(nn.Module):
                  use_block_v2=False,
                  reg_out_type='reg_token',
                  language_modulation='cross_attn',
-                 modulation_loc=[8, 9, 10, 11], 
-                 without_visual_mask=False
+                 num_modulation=4,
+                 modulate_in_last_blocks=False,
+                 reg_token_in_last_blocks=False
                  ):
         """
         Args:
@@ -232,9 +287,14 @@ class VisionTransformer(nn.Module):
         super().__init__()
         self.num_channels = self.embed_dim = embed_dim  # num_features for consistency with other models
         self.num_heads = num_heads
-        self.modulation_loc = modulation_loc
+        # self.modulation_loc = modulation_loc
         self.reg_out_type = reg_out_type
-        self.without_visual_mask = without_visual_mask
+        self.reg_token_in_last_blocks = reg_token_in_last_blocks
+        self.modulate_in_last_blocks = modulate_in_last_blocks
+
+        if self.reg_token_in_last_blocks:
+            assert self.modulate_in_last_blocks, \
+                    'when adding reg_token in last blocks, v-l modulation should be also conducted in last blocks'
 
         norm_layer = partial(nn.LayerNorm, eps=1e-6)
         act_layer = nn.GELU
@@ -251,7 +311,7 @@ class VisionTransformer(nn.Module):
             # nn.init.normal_(self.reg_token, std=0.02)
 
         if use_block_v2:
-            _block = Block_v2
+            _block = Block_v3
         else:
             _block = Block_v1
 
@@ -265,7 +325,11 @@ class VisionTransformer(nn.Module):
                               norm_layer=norm_layer,
                               act_layer=act_layer
                               )
-        
+        if self.modulate_in_last_blocks:
+            self.modulation_loc = [depth - num_modulation + i for i in range(num_modulation)]
+        else:
+            self.modulation_loc = [(depth//num_modulation)*(i+1)-1 for i in range(num_modulation)]
+
         dpr = [x.item() for x in torch.linspace(0, drop_path_rate, depth)]  # stochastic depth decay rule
         block_list = []
         for i in range(depth):
@@ -289,31 +353,30 @@ class VisionTransformer(nn.Module):
 
         visu_src = self.patch_embed(visu_src)
         visu_src = self.pos_drop(visu_src + self.pos_embed)
-        
         visu_src = visu_src.flatten(2).transpose(1, 2)
-        
-        visu_mask = visu_mask[None].float()
-        visu_mask = F.interpolate(visu_mask, size=(self.embed_shape, self.embed_shape)).to(torch.bool)[0]
-        visu_mask = visu_mask.flatten(1)
+
+        ling_mask_expanded = ling_mask.view(batch_size, 1, 1, -1).expand(-1, self.num_heads, -1, -1)
 
         # concatenate [REG] token and visual tokens
         reg_src = self.reg_token.expand(batch_size, -1, -1)
-        visu_src = torch.cat([reg_src, visu_src], dim=1)
-
-        reg_mask = torch.zeros(batch_size, 1, dtype=reg_src.dtype, device=reg_src.device)
-        visu_mask = torch.cat([reg_mask, visu_mask], dim=1)
-
-        visu_mask_expanded = visu_mask.view(batch_size, 1, 1, -1).expand(-1, self.num_heads, -1, -1)
-        ling_mask_expanded = ling_mask.view(batch_size, 1, 1, -1).expand(-1, self.num_heads, -1, -1)
         
-        if self.without_visual_mask:
-            visu_mask_expanded = None
+        if not self.modulate_in_last_blocks:
+            visu_src = torch.cat([reg_src, visu_src], dim=1)
 
-        for i, block in enumerate(self.blocks):
-            if i in self.modulation_loc:
-                visu_src = block(visu_src, ling_src, visu_mask_expanded, ling_mask_expanded)
-            else:
-                visu_src = block(visu_src, visu_mask_expanded)
+            for i, block in enumerate(self.blocks):
+                if i not in self.modulation_loc:
+                    visu_src = block(visu_src, None)
+                else:
+                    visu_src = block(visu_src, ling_src, None, ling_mask_expanded)
+        else:
+            for i in range(len(self.blocks) - len(self.modulation_loc)):
+                visu_src = self.blocks[i](visu_src, None)
+
+            visu_src = torch.cat([reg_src, visu_src], dim=1)
+
+            for j in self.modulation_loc:
+                visu_src = self.blocks[j](visu_src, ling_src, None, ling_mask_expanded)
+                
         reg_src = visu_src[:, 0, :]
 
         if self.norm is not None:
@@ -322,7 +385,6 @@ class VisionTransformer(nn.Module):
         reg_src = reg_src.squeeze(1)
 
         return reg_src
-
 
     def _forward_with_avg_out(self, visu_src, ling_src, visu_mask, ling_mask):
         batch_size = visu_src.shape[0]
@@ -388,9 +450,10 @@ def build_visual_branch(args):
                               qkv_bias=True, 
                               reg_out_type=args.reg_out_type,
                               use_block_v2=args.use_block_v2,
-                              modulation_loc=args.modulation_loc,
                               language_modulation=args.language_modulation,
-                              without_visual_mask=args.without_visual_mask
+                              num_modulation=args.num_modulation,
+                              modulate_in_last_blocks=args.modulate_in_last_blocks,
+                              reg_token_in_last_blocks=args.reg_token_in_last_blocks,
                               )
 
     return model

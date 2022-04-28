@@ -81,8 +81,6 @@ def get_args_parser():
     parser.add_argument('--vl_normalize_before', action='store_true')
     parser.add_argument('--vl_activation', default='relu', type=str)
     parser.add_argument('--avg_valid_tokens', action='store_true')
-    parser.add_argument('--modulation_loc', type=int, nargs='+', default=[8, 9, 10, 11], 
-                        help='location in ViT to integrate linguistic feature')
     parser.add_argument('--reg_out_type', default='reg_input', type=str, 
                         help='option for output regression source feature')
     parser.add_argument('--prompt_tuning', action='store_true')
@@ -90,6 +88,9 @@ def get_args_parser():
     parser.add_argument('--language_modulation', type=str, default='cross_attn',
                         help='language_modulation should be one of ["cross_attn", "concat_linear", "cls_token"]')
     parser.add_argument('--without_visual_mask', action='store_true')
+    parser.add_argument('--num_modulation', type=int, default=4, help='number of v-l blocks')
+    parser.add_argument('--modulate_in_last_blocks', action='store_true')
+    parser.add_argument('--reg_token_in_last_blocks', action='store_true')
 
     # Dataset parameters
     parser.add_argument('--data_root', type=str, default='./ln_data/',
@@ -276,8 +277,8 @@ def main(args):
 
         if args.output_dir:
             checkpoint_paths = [output_dir / 'checkpoint.pth']
-            # extra checkpoint before LR drop and every 10 epochs
-            if (epoch + 1) % args.lr_drop == 0 or (epoch + 1) % 10 == 0:
+            # extra checkpoint before LR drop
+            if (epoch + 1) % args.lr_drop == 0:
                 checkpoint_paths.append(output_dir / f'checkpoint{epoch:04}.pth')
             if val_stats['accu'] > best_accu:
                 checkpoint_paths.append(output_dir / 'best_checkpoint.pth')
