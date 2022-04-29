@@ -41,8 +41,9 @@ class ConcatLinearModulation(nn.Module):
 
     def forward(self, x, y):
         # get cls token
-        y = y[:, 0] 
+        y = y[:, 0, :] 
         y = self.lang_mapping(y)
+        y = y[:, None, :].expand(-1, x.shape[1], -1)
         x = torch.cat([x, y], dim=-1)
         x = self.fc1(x)
         x = self.act(x)
@@ -65,8 +66,8 @@ class ClsTokenModulation(nn.Module):
         super().__init__()
         hidden_dim = int(dim * mlp_ratio)
         
+        self.norm = norm_layer(dim)
         self.fc1 = nn.Linear(dim, hidden_dim)
-        self.norm = norm_layer(hidden_dim)
         self.act = act_layer()
         self.drop1 = nn.Dropout(drop)
         self.fc2 = nn.Linear(hidden_dim, dim)
@@ -74,15 +75,14 @@ class ClsTokenModulation(nn.Module):
 
     def forward(self, x):
         # get cls token
-        x = x[:, 0] 
+        x = x[:, 0, :] 
         x = self.norm(x)
         x = self.fc1(x)
         x = self.act(x)
         x = self.drop1(x)
         x = self.fc2(x)
         x = self.drop2(x)
-
-        return x
+        return x[:, None, :]
 
 
 class Block_v1(nn.Module):
@@ -131,7 +131,9 @@ class Block_v1(nn.Module):
         elif self.language_modulation == 'concat_linear':
             x = x + self.drop_path(self.lang_modulation(x, y))
         elif self.language_modulation == 'cls_token':
-            x = x + self.drop_path(self.lang_modulation(y))
+            y = self.lang_modulation(y)
+            y_expanded = y.expand(-1, x.shape[1], -1)
+            x = x + self.drop_path(y_expanded)
         
         x = x + self.drop_path(self.mlp(self.norm2(x)))
         
@@ -265,7 +267,8 @@ class VisionTransformer(nn.Module):
                  language_modulation='cross_attn',
                  num_modulation=4,
                  modulate_in_last_blocks=False,
-                 reg_token_in_last_blocks=False
+                 reg_token_in_last_blocks=False,
+                 without_visual_mask=False
                  ):
         """
         Args:
@@ -291,6 +294,7 @@ class VisionTransformer(nn.Module):
         self.reg_out_type = reg_out_type
         self.reg_token_in_last_blocks = reg_token_in_last_blocks
         self.modulate_in_last_blocks = modulate_in_last_blocks
+        self.without_visual_mask = without_visual_mask
 
         if self.reg_token_in_last_blocks:
             assert self.modulate_in_last_blocks, \
@@ -355,27 +359,37 @@ class VisionTransformer(nn.Module):
         visu_src = self.pos_drop(visu_src + self.pos_embed)
         visu_src = visu_src.flatten(2).transpose(1, 2)
 
-        ling_mask_expanded = ling_mask.view(batch_size, 1, 1, -1).expand(-1, self.num_heads, -1, -1)
+        ling_mask = ling_mask.view(batch_size, 1, 1, -1).expand(-1, self.num_heads, -1, -1)
 
         # concatenate [REG] token and visual tokens
         reg_src = self.reg_token.expand(batch_size, -1, -1)
         
         if not self.modulate_in_last_blocks:
             visu_src = torch.cat([reg_src, visu_src], dim=1)
+            if self.without_visual_mask:
+                visu_mask = None
+            else:
+                visu_mask = F.pad(visu_mask, (1, 0, 0, 0), value=1)
+                visu_mask = visu_mask.view(batch_size, 1, 1, -1).expand(-1, self.num_heads, -1, -1)
 
             for i, block in enumerate(self.blocks):
                 if i not in self.modulation_loc:
-                    visu_src = block(visu_src, None)
+                    visu_src = block(visu_src, visu_mask)
                 else:
-                    visu_src = block(visu_src, ling_src, None, ling_mask_expanded)
+                    visu_src = block(visu_src, ling_src, visu_mask, ling_mask)
         else:
+            if self.without_visual_mask:
+                visu_mask = None
+            else:
+                visu_mask = visu_mask.view(batch_size, 1, 1, -1).expand(-1, self.num_heads, -1, -1)
+
             for i in range(len(self.blocks) - len(self.modulation_loc)):
-                visu_src = self.blocks[i](visu_src, None)
+                visu_src = self.blocks[i](visu_src, visu_mask)
 
             visu_src = torch.cat([reg_src, visu_src], dim=1)
 
             for j in self.modulation_loc:
-                visu_src = self.blocks[j](visu_src, ling_src, None, ling_mask_expanded)
+                visu_src = self.blocks[j](visu_src, ling_src, visu_mask, ling_mask)
                 
         reg_src = visu_src[:, 0, :]
 
@@ -454,6 +468,7 @@ def build_visual_branch(args):
                               num_modulation=args.num_modulation,
                               modulate_in_last_blocks=args.modulate_in_last_blocks,
                               reg_token_in_last_blocks=args.reg_token_in_last_blocks,
+                              without_visual_mask=args.without_visual_mask,
                               )
 
     return model

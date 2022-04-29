@@ -87,10 +87,10 @@ def get_args_parser():
     parser.add_argument('--use_block_v2', action='store_true')
     parser.add_argument('--language_modulation', type=str, default='cross_attn',
                         help='language_modulation should be one of ["cross_attn", "concat_linear", "cls_token"]')
-    parser.add_argument('--without_visual_mask', action='store_true')
     parser.add_argument('--num_modulation', type=int, default=4, help='number of v-l blocks')
     parser.add_argument('--modulate_in_last_blocks', action='store_true')
     parser.add_argument('--reg_token_in_last_blocks', action='store_true')
+    parser.add_argument('--without_visual_mask', action='store_true')
 
     # Dataset parameters
     parser.add_argument('--data_root', type=str, default='./ln_data/',
