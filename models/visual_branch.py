@@ -200,7 +200,7 @@ class Block_v3(nn.Module):
                  dim, 
                  num_heads, 
                  mlp_ratio=4., 
-                 qkv_bias=False, 
+                 qkv_bias=True, 
                  drop=0., 
                  attn_drop=0., 
                  drop_path=0., 
@@ -358,19 +358,22 @@ class VisionTransformer(nn.Module):
         visu_src = self.patch_embed(visu_src)
         visu_src = self.pos_drop(visu_src + self.pos_embed)
         visu_src = visu_src.flatten(2).transpose(1, 2)
+        reg_src  = self.reg_token.expand(batch_size, -1, -1)
 
         ling_mask = ling_mask.view(batch_size, 1, 1, -1).expand(-1, self.num_heads, -1, -1)
-
-        # concatenate [REG] token and visual tokens
-        reg_src = self.reg_token.expand(batch_size, -1, -1)
         
-        if not self.modulate_in_last_blocks:
+        if self.without_visual_mask:
+            visu_mask = None
+        else:
+            visu_mask = visu_mask[None].float()
+            visu_mask = F.interpolate(visu_mask, size=(self.embed_shape, self.embed_shape)).to(torch.bool)[0]
+            visu_mask = visu_mask.view(batch_size, 1, 1, -1).expand(-1, self.num_heads, -1, -1)
+
+        if not self.reg_token_in_last_blocks:
             visu_src = torch.cat([reg_src, visu_src], dim=1)
-            if self.without_visual_mask:
-                visu_mask = None
-            else:
-                visu_mask = F.pad(visu_mask, (1, 0, 0, 0), value=1)
-                visu_mask = visu_mask.view(batch_size, 1, 1, -1).expand(-1, self.num_heads, -1, -1)
+
+            if visu_mask is not None:
+                visu_mask = F.pad(visu_mask, (1, 0), value=0)
 
             for i, block in enumerate(self.blocks):
                 if i not in self.modulation_loc:
@@ -378,16 +381,14 @@ class VisionTransformer(nn.Module):
                 else:
                     visu_src = block(visu_src, ling_src, visu_mask, ling_mask)
         else:
-            if self.without_visual_mask:
-                visu_mask = None
-            else:
-                visu_mask = visu_mask.view(batch_size, 1, 1, -1).expand(-1, self.num_heads, -1, -1)
-
             for i in range(len(self.blocks) - len(self.modulation_loc)):
                 visu_src = self.blocks[i](visu_src, visu_mask)
 
             visu_src = torch.cat([reg_src, visu_src], dim=1)
-
+            
+            if visu_mask is not None:
+                visu_mask = F.pad(visu_mask, (1, 0), value=0)
+            
             for j in self.modulation_loc:
                 visu_src = self.blocks[j](visu_src, ling_src, visu_mask, ling_mask)
                 
@@ -456,12 +457,9 @@ def build_visual_branch(args):
         embed_dim, num_heads, mlp_ratio = 256, 8, 8
     
     model = VisionTransformer(img_size=args.imsize, 
-                              patch_size=16, 
                               embed_dim=embed_dim, 
-                              depth=12, 
                               num_heads=num_heads, 
                               mlp_ratio=mlp_ratio, 
-                              qkv_bias=True, 
                               reg_out_type=args.reg_out_type,
                               use_block_v2=args.use_block_v2,
                               language_modulation=args.language_modulation,
