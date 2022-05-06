@@ -11,10 +11,14 @@ class LinguisticModel(nn.Module):
     """ Linguistic Model with Transformers (BERT)."""
     def __init__(self, 
                  pretrained_backbone, 
-                 prompt_tuning=False
+                 frozen_embedding=False,
+                 frozen_encoder=False,
+                 prompt_tuning=False,
                  ):
         super().__init__()
         self.prompt_tuning = prompt_tuning
+        self.frozen_encoder = frozen_encoder if not self.prompt_tuning else True
+        self.frozen_embedding = frozen_embedding if not self.frozen_encoder else True
         self.num_channels = 768
 
         self.embeddings = pretrained_backbone.embeddings
@@ -36,11 +40,12 @@ class LinguisticModel(nn.Module):
         self._freeze_params()
 
     def _freeze_params(self):
-        self.embeddings.eval()
-        for param in self.embeddings.parameters():
-            param.requires_grad = False
+        if self.frozen_embedding:
+            self.embeddings.eval()
+            for param in self.embeddings.parameters():
+                param.requires_grad = False
         
-        if self.prompt_tuning:
+        if self.frozen_encoder:
             self.encoder.eval()
             for param in self.encoder.parameters():
                 param.requires_grad = False
@@ -90,6 +95,11 @@ def build_linguistic_branch(args):
     bert_model = RobertaModel
 
     bert_model = bert_model.from_pretrained(args.pretrained_lm_path + '/' + args.bert_model)
-    # is_freeze = args.lr_bert == 0
-    model = LinguisticModel(bert_model, args.prompt_tuning)
+
+    model = LinguisticModel(bert_model, 
+                            frozen_embedding=args.language_frozen_embedding,
+                            frozen_encoder=args.langauge_frozen_encoder,
+                            prompt_tuning=args.language_prompt_tuning
+                            )
+    
     return model

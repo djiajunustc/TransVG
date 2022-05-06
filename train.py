@@ -83,7 +83,6 @@ def get_args_parser():
     parser.add_argument('--avg_valid_tokens', action='store_true')
     parser.add_argument('--reg_out_type', default='reg_input', type=str, 
                         help='option for output regression source feature')
-    parser.add_argument('--prompt_tuning', action='store_true')
     parser.add_argument('--use_block_v2', action='store_true')
     parser.add_argument('--language_modulation', type=str, default='cross_attn',
                         help='language_modulation should be one of ["cross_attn", "concat_linear", "cls_token"]')
@@ -91,7 +90,13 @@ def get_args_parser():
     parser.add_argument('--modulate_in_last_blocks', action='store_true')
     parser.add_argument('--reg_token_in_last_blocks', action='store_true')
     parser.add_argument('--without_visual_mask', action='store_true')
+    parser.add_argument('--num_vpt', type=int, default=0)
 
+    # Language Branch
+    parser.add_argument('--language_prompt_tuning', action='store_true')
+    parser.add_argument('--language_frozen_embedding', action='store_true')
+    parser.add_argument('--langauge_frozen_encoder', action='store_true')
+    
     # Dataset parameters
     parser.add_argument('--data_root', type=str, default='./ln_data/',
                         help='path to ReferIt splits data folder')
