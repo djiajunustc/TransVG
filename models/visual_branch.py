@@ -85,116 +85,116 @@ class ClsTokenModulation(nn.Module):
         return x[:, None, :]
 
 
-class Block_v1(nn.Module):
+# class Block_v1(nn.Module):
 
-    def __init__(self, 
-                 dim, 
-                 num_heads, 
-                 mlp_ratio=4., 
-                 qkv_bias=False, 
-                 drop=0., 
-                 attn_drop=0., 
-                 drop_path=0., 
-                 act_layer=nn.GELU, 
-                 norm_layer=nn.LayerNorm,
-                 language_modulation=None,
-                 ):
-        super().__init__()
-        self.norm1 = norm_layer(dim)
-        self.attn = AttentionV2(dim, num_heads=num_heads, qkv_bias=qkv_bias, attn_drop=attn_drop, proj_drop=drop)
-        # NOTE: drop path for stochastic depth, we shall see if this is better than dropout here
-        self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
-        self.norm2 = norm_layer(dim)
-        mlp_hidden_dim = int(dim * mlp_ratio)
-        self.mlp = Mlp(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop)
+#     def __init__(self, 
+#                  dim, 
+#                  num_heads, 
+#                  mlp_ratio=4., 
+#                  qkv_bias=False, 
+#                  drop=0., 
+#                  attn_drop=0., 
+#                  drop_path=0., 
+#                  act_layer=nn.GELU, 
+#                  norm_layer=nn.LayerNorm,
+#                  language_modulation=None,
+#                  ):
+#         super().__init__()
+#         self.norm1 = norm_layer(dim)
+#         self.attn = AttentionV2(dim, num_heads=num_heads, qkv_bias=qkv_bias, attn_drop=attn_drop, proj_drop=drop)
+#         # NOTE: drop path for stochastic depth, we shall see if this is better than dropout here
+#         self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
+#         self.norm2 = norm_layer(dim)
+#         mlp_hidden_dim = int(dim * mlp_ratio)
+#         self.mlp = Mlp(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop)
 
-        self.language_modulation= language_modulation
-        if self.language_modulation is not None:
-            if self.language_modulation == 'cross_attn':
-                self.lang_modulation = AttentionV2(dim, num_heads=num_heads, qkv_bias=qkv_bias, attn_drop=attn_drop, proj_drop=drop)
-            elif self.language_modulation == 'concat_linear':
-                self.lang_modulation = ConcatLinearModulation(dim=dim, mlp_ratio=mlp_ratio, act_layer=act_layer, norm_layer=norm_layer)
-            elif self.language_modulation == 'cls_token':
-                self.lang_modulation = ClsTokenModulation(dim=dim, mlp_ratio=mlp_ratio, act_layer=act_layer, norm_layer=norm_layer)
-            else:
-                raise ValueError('language_modulation can only be one of ["cross_attn", "concat_linear", "cls_token"]')
+#         self.language_modulation= language_modulation
+#         if self.language_modulation is not None:
+#             if self.language_modulation == 'cross_attn':
+#                 self.lang_modulation = AttentionV2(dim, num_heads=num_heads, qkv_bias=qkv_bias, attn_drop=attn_drop, proj_drop=drop)
+#             elif self.language_modulation == 'concat_linear':
+#                 self.lang_modulation = ConcatLinearModulation(dim=dim, mlp_ratio=mlp_ratio, act_layer=act_layer, norm_layer=norm_layer)
+#             elif self.language_modulation == 'cls_token':
+#                 self.lang_modulation = ClsTokenModulation(dim=dim, mlp_ratio=mlp_ratio, act_layer=act_layer, norm_layer=norm_layer)
+#             else:
+#                 raise ValueError('language_modulation can only be one of ["cross_attn", "concat_linear", "cls_token"]')
 
-    def forward(self, x, y=None, x_attn_mask=None, y_attn_mask=None):
-        norm_x = self.norm1(x)
-        x = x + self.drop_path(self.attn(norm_x, norm_x, norm_x, x_attn_mask))
+#     def forward(self, x, y=None, x_attn_mask=None, y_attn_mask=None):
+#         norm_x = self.norm1(x)
+#         x = x + self.drop_path(self.attn(norm_x, norm_x, norm_x, x_attn_mask))
         
-        if self.language_modulation is not None:
-            assert y is not None
+#         if self.language_modulation is not None:
+#             assert y is not None
         
-        if self.language_modulation == 'cross_attn':
-            x = x + self.drop_path(self.lang_modulation(x, y, y, y_attn_mask))
-        elif self.language_modulation == 'concat_linear':
-            x = x + self.drop_path(self.lang_modulation(x, y))
-        elif self.language_modulation == 'cls_token':
-            y = self.lang_modulation(y)
-            y_expanded = y.expand(-1, x.shape[1], -1)
-            x = x + self.drop_path(y_expanded)
+#         if self.language_modulation == 'cross_attn':
+#             x = x + self.drop_path(self.lang_modulation(x, y, y, y_attn_mask))
+#         elif self.language_modulation == 'concat_linear':
+#             x = x + self.drop_path(self.lang_modulation(x, y))
+#         elif self.language_modulation == 'cls_token':
+#             y = self.lang_modulation(y)
+#             y_expanded = y.expand(-1, x.shape[1], -1)
+#             x = x + self.drop_path(y_expanded)
         
-        x = x + self.drop_path(self.mlp(self.norm2(x)))
+#         x = x + self.drop_path(self.mlp(self.norm2(x)))
         
-        return x
+#         return x
 
 
-class Block_v2(nn.Module):
+# class Block_v2(nn.Module):
 
-    def __init__(self, 
-                 dim, 
-                 num_heads, 
-                 mlp_ratio=4., 
-                 qkv_bias=False, 
-                 drop=0., 
-                 attn_drop=0., 
-                 drop_path=0., 
-                 act_layer=nn.GELU, 
-                 norm_layer=nn.LayerNorm,
-                 language_modulation=None
-                 ):
-        super().__init__()
-        self.norm1 = norm_layer(dim)
-        self.attn = AttentionV2(dim, num_heads=num_heads, qkv_bias=qkv_bias, attn_drop=attn_drop, proj_drop=drop)
-        # NOTE: drop path for stochastic depth, we shall see if this is better than dropout here
-        self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
-        self.norm2 = norm_layer(dim)
-        mlp_hidden_dim = int(dim * mlp_ratio)
-        self.mlp = Mlp(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop)
+#     def __init__(self, 
+#                  dim, 
+#                  num_heads, 
+#                  mlp_ratio=4., 
+#                  qkv_bias=False, 
+#                  drop=0., 
+#                  attn_drop=0., 
+#                  drop_path=0., 
+#                  act_layer=nn.GELU, 
+#                  norm_layer=nn.LayerNorm,
+#                  language_modulation=None
+#                  ):
+#         super().__init__()
+#         self.norm1 = norm_layer(dim)
+#         self.attn = AttentionV2(dim, num_heads=num_heads, qkv_bias=qkv_bias, attn_drop=attn_drop, proj_drop=drop)
+#         # NOTE: drop path for stochastic depth, we shall see if this is better than dropout here
+#         self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
+#         self.norm2 = norm_layer(dim)
+#         mlp_hidden_dim = int(dim * mlp_ratio)
+#         self.mlp = Mlp(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop)
 
-        self.language_modulation= language_modulation
-        if self.language_modulation is not None:
-            if self.language_modulation == 'cross_attn':
-                self.norm3 = norm_layer(dim)
-                self.lang_modulation = AttentionV2(dim, num_heads=num_heads, qkv_bias=qkv_bias, attn_drop=attn_drop, proj_drop=drop)
-            elif self.language_modulation == 'concat_linear':
-                self.norm3 = norm_layer(dim)
-                self.lang_modulation = ConcatLinearModulation(dim=dim, mlp_ratio=mlp_ratio, act_layer=act_layer, norm_layer=norm_layer)
-            elif self.language_modulation == 'cls_token':
-                self.lang_modulation = ClsTokenModulation(dim=dim, mlp_ratio=mlp_ratio, act_layer=act_layer, norm_layer=norm_layer)
-            else:
-                raise ValueError('language_modulation can only be one of ["cross_attn", "concat_linear", "cls_token"]')
+#         self.language_modulation= language_modulation
+#         if self.language_modulation is not None:
+#             if self.language_modulation == 'cross_attn':
+#                 self.norm3 = norm_layer(dim)
+#                 self.lang_modulation = AttentionV2(dim, num_heads=num_heads, qkv_bias=qkv_bias, attn_drop=attn_drop, proj_drop=drop)
+#             elif self.language_modulation == 'concat_linear':
+#                 self.norm3 = norm_layer(dim)
+#                 self.lang_modulation = ConcatLinearModulation(dim=dim, mlp_ratio=mlp_ratio, act_layer=act_layer, norm_layer=norm_layer)
+#             elif self.language_modulation == 'cls_token':
+#                 self.lang_modulation = ClsTokenModulation(dim=dim, mlp_ratio=mlp_ratio, act_layer=act_layer, norm_layer=norm_layer)
+#             else:
+#                 raise ValueError('language_modulation can only be one of ["cross_attn", "concat_linear", "cls_token"]')
 
-    def forward(self, x, y=None, x_attn_mask=None, y_attn_mask=None):
-        norm_x = self.norm1(x)
-        x = x + self.drop_path(self.attn(norm_x, norm_x, norm_x, x_attn_mask))
-        x = x + self.drop_path(self.mlp(self.norm2(x)))
+#     def forward(self, x, y=None, x_attn_mask=None, y_attn_mask=None):
+#         norm_x = self.norm1(x)
+#         x = x + self.drop_path(self.attn(norm_x, norm_x, norm_x, x_attn_mask))
+#         x = x + self.drop_path(self.mlp(self.norm2(x)))
         
-        if self.language_modulation:
-            assert y is not None
+#         if self.language_modulation:
+#             assert y is not None
         
-        if self.language_modulation == 'cross_attn':
-            x = x + self.drop_path(self.lang_modulation(self.norm3(x), y, y, y_attn_mask))
-        elif self.language_modulation == 'concat_linear':
-            x = x + self.drop_path(self.lang_modulation(self.norm3(x), y))
-        elif self.language_modulation == 'cls_token':
-            x = x + self.drop_path(self.lang_modulation(y))
+#         if self.language_modulation == 'cross_attn':
+#             x = x + self.drop_path(self.lang_modulation(self.norm3(x), y, y, y_attn_mask))
+#         elif self.language_modulation == 'concat_linear':
+#             x = x + self.drop_path(self.lang_modulation(self.norm3(x), y))
+#         elif self.language_modulation == 'cls_token':
+#             x = x + self.drop_path(self.lang_modulation(y))
 
-        return x
+#         return x
 
 
-class Block_v3(nn.Module):
+class Block(nn.Module):
 
     def __init__(self, 
                  dim, 
@@ -262,13 +262,14 @@ class VisionTransformer(nn.Module):
                  drop_rate=0., 
                  attn_drop_rate=0., 
                  drop_path_rate=0., 
-                 use_block_v2=False,
+                #  use_block_v2=False,
                  reg_out_type='reg_token',
                  language_modulation='cross_attn',
                  num_modulation=4,
                  modulate_in_last_blocks=False,
                  reg_token_in_last_blocks=False,
-                 without_visual_mask=False
+                 without_visual_mask=False,
+                 num_vpt=0
                  ):
         """
         Args:
@@ -295,6 +296,7 @@ class VisionTransformer(nn.Module):
         self.reg_token_in_last_blocks = reg_token_in_last_blocks
         self.modulate_in_last_blocks = modulate_in_last_blocks
         self.without_visual_mask = without_visual_mask
+        self.num_vpt = num_vpt
 
         if self.reg_token_in_last_blocks:
             assert self.modulate_in_last_blocks, \
@@ -314,10 +316,11 @@ class VisionTransformer(nn.Module):
             self.reg_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
             # nn.init.normal_(self.reg_token, std=0.02)
 
-        if use_block_v2:
-            _block = Block_v3
-        else:
-            _block = Block_v1
+        # if use_block_v2:
+        #     _block = Block_v3
+        # else:
+        #     _block = Block_v1
+        _block = Block
 
         basic_block = partial(_block, 
                               dim=embed_dim,
@@ -344,14 +347,33 @@ class VisionTransformer(nn.Module):
         self.blocks = nn.ModuleList(block_list)
 
         self.norm = norm_layer(embed_dim)
+        
+        if self.num_vpt > 0:
+            assert self.modulate_in_last_blocks and self.reg_token_in_last_blocks, \
+                'When using prompt tuning, vl-modulation conducted in last blocks and reg_token added in last blocks'
+            self.prompt_tokens = nn.Parameter(torch.zeros(depth-num_modulation, self.num_vpt, embed_dim))
 
         self._reset_parameters()
+        self._freeze_parameters()
     
     def _reset_parameters(self):
         for p in self.parameters():
             if p.dim() > 1:
                 nn.init.xavier_uniform_(p)
-    
+
+    def _freeze_parameters(self):
+        if self.num_vpt > 0:
+            self.pos_drop.eval()
+            self.patch_embed.eval()
+            self.pos_embed.requires_grad = False
+            for param in self.patch_embed.parameters():
+                param.requires_grad = False
+        
+            for i in range(len(self.blocks) - len(self.modulation_loc)):
+                self.blocks[i].eval()
+                for param in self.blocks[i].parameters():
+                    param.requires_grad = False
+
     def _forward_with_reg_token(self, visu_src, ling_src, visu_mask, ling_mask):
         batch_size = visu_src.shape[0]
 
@@ -381,8 +403,16 @@ class VisionTransformer(nn.Module):
                 else:
                     visu_src = block(visu_src, ling_src, visu_mask, ling_mask)
         else:
+            
             for i in range(len(self.blocks) - len(self.modulation_loc)):
+                if self.num_vpt > 0:
+                    expanded_prompt_tokens = self.prompt_tokens[i].unsqueeze(0).expand(visu_src.shape[0], -1, -1)
+                    visu_src = torch.cat([visu_src, expanded_prompt_tokens], dim=1)
+
                 visu_src = self.blocks[i](visu_src, visu_mask)
+
+                if self.num_vpt > 0:
+                    visu_src = visu_src[:, :-1*self.num_vpt, :]
 
             visu_src = torch.cat([reg_src, visu_src], dim=1)
             
@@ -461,12 +491,13 @@ def build_visual_branch(args):
                               num_heads=num_heads, 
                               mlp_ratio=mlp_ratio, 
                               reg_out_type=args.reg_out_type,
-                              use_block_v2=args.use_block_v2,
+                            #   use_block_v2=args.use_block_v2,
                               language_modulation=args.language_modulation,
                               num_modulation=args.num_modulation,
                               modulate_in_last_blocks=args.modulate_in_last_blocks,
                               reg_token_in_last_blocks=args.reg_token_in_last_blocks,
                               without_visual_mask=args.without_visual_mask,
+                              num_vpt=args.num_vpt
                               )
 
     return model
