@@ -123,8 +123,9 @@ def evaluate(args, model: torch.nn.Module, data_loader: Iterable, device: torch.
 
     result_tensor = torch.tensor([accu_num, total_num]).to(device)
     
-    torch.cuda.synchronize()
-    dist.all_reduce(result_tensor)
+    if utils.get_world_size() > 1:
+        torch.cuda.synchronize()
+        dist.all_reduce(result_tensor)
 
     accuracy = float(result_tensor[0]) / float(result_tensor[1])
     
