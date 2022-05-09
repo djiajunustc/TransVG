@@ -53,6 +53,9 @@ def get_args_parser():
     # Transformers in two branches
     parser.add_argument('--bert_enc_num', default=12, type=int)
     parser.add_argument('--detr_enc_num', default=6, type=int)
+    parser.add_argument('--bert_model', default='roberta-base', type=str, help='bert model')
+    parser.add_argument('--vit_model', default='small', type=str, help='vit model')
+    parser.add_argument('--separate_qkv', action='store_true')
 
     # DETR parameters
     # * Backbone
@@ -128,11 +131,15 @@ def get_args_parser():
     parser.add_argument('--seed', default=13, type=int)
     parser.add_argument('--resume', default='', help='resume from checkpoint')
     parser.add_argument('--detr_model', default='./saved_models/detr-r50.pth', type=str, help='detr model')
-    parser.add_argument('--bert_model', default='bert-base-uncased', type=str, help='bert model')
     parser.add_argument('--light', dest='light', default=False, action='store_true', help='if use smaller model')
     parser.add_argument('--start_epoch', default=0, type=int, metavar='N',
                         help='start epoch')
     parser.add_argument('--num_workers', default=2, type=int)
+    
+    parser.add_argument('--visual_pretrained', default='./saved_models/detr-r50.pth', 
+                        type=str, help='detr model')
+    parser.add_argument('--pretrained_lm_path', default='../Language-Models', type=str, 
+                        help='root path at which we save language models')
 
     # distributed training parameters
     parser.add_argument('--world_size', default=1, type=int,
