@@ -5,6 +5,8 @@ import torch.nn.functional as F
 from .visual_branch import build_visual_branch
 from .linguistic_branch import build_linguistic_branch
 
+# experiments
+from .visual_branch_prompt_fusion import build_visual_branch_prompt_fusion
 
 class LViT(nn.Module):
     def __init__(self, args):
@@ -12,7 +14,10 @@ class LViT(nn.Module):
         hidden_dim = args.vl_hidden_dim
         
         self.linguistic_branch = build_linguistic_branch(args)
-        self.visual_branch = build_visual_branch(args)
+        if args.language_modulation == 'prompt_fusion':
+            self.visual_branch = build_visual_branch_prompt_fusion(args)
+        else:
+            self.visual_branch = build_visual_branch(args)
 
         self.text_proj = nn.Linear(self.linguistic_branch.num_channels, hidden_dim)
 

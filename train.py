@@ -96,6 +96,8 @@ def get_args_parser():
     parser.add_argument('--language_prompt_tuning', action='store_true')
     parser.add_argument('--language_frozen_embedding', action='store_true')
     parser.add_argument('--langauge_frozen_encoder', action='store_true')
+    parser.add_argument('--max_query_len', default=20, type=int,
+                            help='maximum time steps (lang length) per batch')
     
     # Dataset parameters
     parser.add_argument('--data_root', type=str, default='./ln_data/',
@@ -104,9 +106,7 @@ def get_args_parser():
                         help='location of pre-parsed dataset info')
     parser.add_argument('--dataset', default='referit', type=str,
                         help='referit/unc/unc+/gref/gref_umd')
-    parser.add_argument('--max_query_len', default=20, type=int,
-                        help='maximum time steps (lang length) per batch')
-    
+
     parser.add_argument('--output_dir', default='./outputs',
                         help='path where to save, empty for no saving')
     parser.add_argument('--device', default='cuda',
