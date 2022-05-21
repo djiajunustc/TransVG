@@ -54,7 +54,7 @@ class ConcatLinearModulation(nn.Module):
         return x
 
 
-class ClsTokenModulation(nn.Module):
+class AvgPoolingModulation(nn.Module):
     
     def __init__(self,
                  dim,
@@ -66,24 +66,20 @@ class ClsTokenModulation(nn.Module):
         super().__init__()
         hidden_dim = int(dim * mlp_ratio)
         
-        self.norm = norm_layer(dim)
+        # self.norm = norm_layer(dim)
         self.fc1 = nn.Linear(dim, hidden_dim)
-        self.act = act_layer()
-        self.drop1 = nn.Dropout(drop)
+        # self.act = act_layer()
+        # self.drop1 = nn.Dropout(drop)
         self.fc2 = nn.Linear(hidden_dim, dim)
-        self.drop2 = nn.Dropout(drop)
+        # self.drop2 = nn.Dropout(drop)
 
     def forward(self, x):
-        # get cls token
-        x = x[:, 0, :] 
-        x = self.norm(x)
         x = self.fc1(x)
-        x = self.act(x)
-        x = self.drop1(x)
+        x = torch.mean(x, dim=1, keepdim=True)
         x = self.fc2(x)
-        x = self.drop2(x)
-        return x[:, None, :]
 
+        return x
+        
 
 # class Block_v1(nn.Module):
 
@@ -222,12 +218,10 @@ class Block(nn.Module):
             if self.language_modulation == 'cross_attn':
                 self.norm3 = norm_layer(dim)
                 self.lang_modulation = AttentionV2(dim, num_heads=num_heads, qkv_bias=qkv_bias, attn_drop=attn_drop, proj_drop=drop)
-            elif self.language_modulation == 'concat_linear':
-                self.lang_modulation = ConcatLinearModulation(dim=dim, mlp_ratio=mlp_ratio, act_layer=act_layer, norm_layer=norm_layer)
-            elif self.language_modulation == 'cls_token':
-                self.lang_modulation = ClsTokenModulation(dim=dim, mlp_ratio=mlp_ratio, act_layer=act_layer, norm_layer=norm_layer)
+            elif self.language_modulation == 'avg_pooling':
+                self.lang_modulation = AvgPoolingModulation(dim=dim, mlp_ratio=mlp_ratio, act_layer=act_layer, norm_layer=norm_layer)
             else:
-                raise ValueError('language_modulation can only be one of ["cross_attn", "concat_linear", "cls_token"]')
+                raise ValueError('language_modulation can only be one of ["cross_attn", "avg_pooling"]')
 
     def forward(self, x, y=None, x_attn_mask=None, y_attn_mask=None):
         norm_x = self.norm1(x)
@@ -238,9 +232,7 @@ class Block(nn.Module):
         
         if self.language_modulation == 'cross_attn':
             x = x + self.drop_path(self.lang_modulation(self.norm3(x), y, y, y_attn_mask))
-        elif self.language_modulation == 'concat_linear':
-            x = x + self.drop_path(self.lang_modulation(x, y))
-        elif self.language_modulation == 'cls_token':
+        elif self.language_modulation == 'avg_pooling':
             x = x + self.drop_path(self.lang_modulation(y))
         
         x = x + self.drop_path(self.mlp(self.norm2(x)))
