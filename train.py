@@ -52,7 +52,7 @@ def get_args_parser():
     parser.add_argument('--modulate_in_last_blocks', action='store_true')
     parser.add_argument('--reg_token_in_last_blocks', action='store_true')
     parser.add_argument('--without_visual_mask', action='store_true')
-    # parser.add_argument('--num_vpt', type=int, default=0)
+    parser.add_argument('--num_vpt', type=int, default=0)
 
     # Language Branch
     # parser.add_argument('--language_prompt_tuning', action='store_true')

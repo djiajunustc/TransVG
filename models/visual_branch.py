@@ -10,55 +10,11 @@ from timm.models.layers import Mlp, DropPath #, trunc_normal_, lecun_normal_
 from .layers import AttentionV2, PatchEmbed
 
 
-class ConcatLinearModulation(nn.Module):
-    
-    def __init__(self,
-                 dim,
-                 mlp_ratio=4,
-                 drop=0.1,
-                 act_layer=nn.GELU,
-                 norm_layer=nn.LayerNorm
-                 ):
-        super().__init__()
-        concat_dim = int(dim * 2)
-        hidden_dim = int(dim * mlp_ratio)
-
-        self.lang_mapping = nn.Sequential(
-            nn.Linear(dim, dim),
-            norm_layer(dim),
-            # act_layer(dim),
-            # nn.Dropout(drop),
-            # nn.Linear(dim, dim),
-            # norm_layer(dim),
-            # act_layer(dim)
-        )
-        
-        self.fc1 = nn.Linear(concat_dim, hidden_dim)
-        self.act = act_layer()
-        self.drop1 = nn.Dropout(drop)
-        self.fc2 = nn.Linear(hidden_dim, dim)
-        self.drop2 = nn.Dropout(drop)
-
-    def forward(self, x, y):
-        # get cls token
-        y = y[:, 0, :] 
-        y = self.lang_mapping(y)
-        y = y[:, None, :].expand(-1, x.shape[1], -1)
-        x = torch.cat([x, y], dim=-1)
-        x = self.fc1(x)
-        x = self.act(x)
-        x = self.drop1(x)
-        x = self.fc2(x)
-        x = self.drop2(x)
-
-        return x
-
-
 class AvgPoolingModulation(nn.Module):
     
     def __init__(self,
                  dim,
-                 mlp_ratio=4,
+                 mlp_ratio=1,
                  drop=0.1,
                  act_layer=nn.GELU,
                  norm_layer=nn.LayerNorm
@@ -66,12 +22,8 @@ class AvgPoolingModulation(nn.Module):
         super().__init__()
         hidden_dim = int(dim * mlp_ratio)
         
-        # self.norm = norm_layer(dim)
         self.fc1 = nn.Linear(dim, hidden_dim)
-        # self.act = act_layer()
-        # self.drop1 = nn.Dropout(drop)
         self.fc2 = nn.Linear(hidden_dim, dim)
-        # self.drop2 = nn.Dropout(drop)
 
     def forward(self, x):
         x = self.fc1(x)
@@ -80,115 +32,6 @@ class AvgPoolingModulation(nn.Module):
 
         return x
         
-
-# class Block_v1(nn.Module):
-
-#     def __init__(self, 
-#                  dim, 
-#                  num_heads, 
-#                  mlp_ratio=4., 
-#                  qkv_bias=False, 
-#                  drop=0., 
-#                  attn_drop=0., 
-#                  drop_path=0., 
-#                  act_layer=nn.GELU, 
-#                  norm_layer=nn.LayerNorm,
-#                  language_modulation=None,
-#                  ):
-#         super().__init__()
-#         self.norm1 = norm_layer(dim)
-#         self.attn = AttentionV2(dim, num_heads=num_heads, qkv_bias=qkv_bias, attn_drop=attn_drop, proj_drop=drop)
-#         # NOTE: drop path for stochastic depth, we shall see if this is better than dropout here
-#         self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
-#         self.norm2 = norm_layer(dim)
-#         mlp_hidden_dim = int(dim * mlp_ratio)
-#         self.mlp = Mlp(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop)
-
-#         self.language_modulation= language_modulation
-#         if self.language_modulation is not None:
-#             if self.language_modulation == 'cross_attn':
-#                 self.lang_modulation = AttentionV2(dim, num_heads=num_heads, qkv_bias=qkv_bias, attn_drop=attn_drop, proj_drop=drop)
-#             elif self.language_modulation == 'concat_linear':
-#                 self.lang_modulation = ConcatLinearModulation(dim=dim, mlp_ratio=mlp_ratio, act_layer=act_layer, norm_layer=norm_layer)
-#             elif self.language_modulation == 'cls_token':
-#                 self.lang_modulation = ClsTokenModulation(dim=dim, mlp_ratio=mlp_ratio, act_layer=act_layer, norm_layer=norm_layer)
-#             else:
-#                 raise ValueError('language_modulation can only be one of ["cross_attn", "concat_linear", "cls_token"]')
-
-#     def forward(self, x, y=None, x_attn_mask=None, y_attn_mask=None):
-#         norm_x = self.norm1(x)
-#         x = x + self.drop_path(self.attn(norm_x, norm_x, norm_x, x_attn_mask))
-        
-#         if self.language_modulation is not None:
-#             assert y is not None
-        
-#         if self.language_modulation == 'cross_attn':
-#             x = x + self.drop_path(self.lang_modulation(x, y, y, y_attn_mask))
-#         elif self.language_modulation == 'concat_linear':
-#             x = x + self.drop_path(self.lang_modulation(x, y))
-#         elif self.language_modulation == 'cls_token':
-#             y = self.lang_modulation(y)
-#             y_expanded = y.expand(-1, x.shape[1], -1)
-#             x = x + self.drop_path(y_expanded)
-        
-#         x = x + self.drop_path(self.mlp(self.norm2(x)))
-        
-#         return x
-
-
-# class Block_v2(nn.Module):
-
-#     def __init__(self, 
-#                  dim, 
-#                  num_heads, 
-#                  mlp_ratio=4., 
-#                  qkv_bias=False, 
-#                  drop=0., 
-#                  attn_drop=0., 
-#                  drop_path=0., 
-#                  act_layer=nn.GELU, 
-#                  norm_layer=nn.LayerNorm,
-#                  language_modulation=None
-#                  ):
-#         super().__init__()
-#         self.norm1 = norm_layer(dim)
-#         self.attn = AttentionV2(dim, num_heads=num_heads, qkv_bias=qkv_bias, attn_drop=attn_drop, proj_drop=drop)
-#         # NOTE: drop path for stochastic depth, we shall see if this is better than dropout here
-#         self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
-#         self.norm2 = norm_layer(dim)
-#         mlp_hidden_dim = int(dim * mlp_ratio)
-#         self.mlp = Mlp(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop)
-
-#         self.language_modulation= language_modulation
-#         if self.language_modulation is not None:
-#             if self.language_modulation == 'cross_attn':
-#                 self.norm3 = norm_layer(dim)
-#                 self.lang_modulation = AttentionV2(dim, num_heads=num_heads, qkv_bias=qkv_bias, attn_drop=attn_drop, proj_drop=drop)
-#             elif self.language_modulation == 'concat_linear':
-#                 self.norm3 = norm_layer(dim)
-#                 self.lang_modulation = ConcatLinearModulation(dim=dim, mlp_ratio=mlp_ratio, act_layer=act_layer, norm_layer=norm_layer)
-#             elif self.language_modulation == 'cls_token':
-#                 self.lang_modulation = ClsTokenModulation(dim=dim, mlp_ratio=mlp_ratio, act_layer=act_layer, norm_layer=norm_layer)
-#             else:
-#                 raise ValueError('language_modulation can only be one of ["cross_attn", "concat_linear", "cls_token"]')
-
-#     def forward(self, x, y=None, x_attn_mask=None, y_attn_mask=None):
-#         norm_x = self.norm1(x)
-#         x = x + self.drop_path(self.attn(norm_x, norm_x, norm_x, x_attn_mask))
-#         x = x + self.drop_path(self.mlp(self.norm2(x)))
-        
-#         if self.language_modulation:
-#             assert y is not None
-        
-#         if self.language_modulation == 'cross_attn':
-#             x = x + self.drop_path(self.lang_modulation(self.norm3(x), y, y, y_attn_mask))
-#         elif self.language_modulation == 'concat_linear':
-#             x = x + self.drop_path(self.lang_modulation(self.norm3(x), y))
-#         elif self.language_modulation == 'cls_token':
-#             x = x + self.drop_path(self.lang_modulation(y))
-
-#         return x
-
 
 class Block(nn.Module):
 
