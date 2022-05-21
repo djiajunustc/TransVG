@@ -44,23 +44,6 @@ def get_args_parser():
     parser.add_argument('--bert_model', default='roberta-base', type=str, help='bert model')
     parser.add_argument('--vit_model', default='small', type=str, help='vit model')
     parser.add_argument('--separate_qkv', action='store_true')
-
-    # Vision-Language Transformer
-    # parser.add_argument('--vl_dropout', default=0.1, type=float,
-    #                     help="Dropout applied in the vision-language transformer")
-    # parser.add_argument('--vl_nheads', default=8, type=int,
-    #                     help="Number of attention heads inside the vision-language transformer's attentions")
-    # parser.add_argument('--vl_hidden_dim', default=256, type=int,
-    #                     help='Size of the embeddings (dimension of the vision-language transformer)')
-    # parser.add_argument('--vl_dim_feedforward', default=2048, type=int,
-    #                     help="Intermediate size of the feedforward layers in the vision-language transformer blocks")
-    # parser.add_argument('--vl_depth', default=6, type=int,
-    #                     help='Number of encoders in the vision-language transformer')
-    # parser.add_argument('--vl_normalize_before', action='store_true')
-    # parser.add_argument('--vl_activation', default='relu', type=str)
-    # parser.add_argument('--avg_valid_tokens', action='store_true')
-    
-    # parser.add_argument('--use_block_v2', action='store_true')
     parser.add_argument('--reg_out_type', default='reg_input', type=str, 
                         help='option for output regression source feature')
     parser.add_argument('--language_modulation', type=str, default='cross_attn',
@@ -144,32 +127,6 @@ def main(args):
     
     frozen_params = [n for n, p in model_without_ddp.named_parameters() if not p.requires_grad]
     print('Frozen parameters', frozen_params)
-    
-    # # using RMSProp or AdamW
-    # if args.optimizer == 'rmsprop':
-    #     optimizer = torch.optim.RMSprop(param_list, lr=args.lr, weight_decay=args.weight_decay)
-    # elif args.optimizer == 'adamw':
-    #     optimizer = torch.optim.AdamW(param_list, lr=args.lr, weight_decay=args.weight_decay)
-    # elif args.optimizer == 'adam':
-    #     optimizer = torch.optim.Adam(param_list, lr=args.lr, weight_decay=args.weight_decay)
-    # elif args.optimizer == 'sgd':
-    #     optimizer = torch.optim.SGD(param_list, lr=args.lr, weight_decay=args.weight_decay, momentum=0.9)
-    # else:
-    #     raise ValueError('Lr scheduler type not supportted ')
-    
-    # if args.lr_scheduler == 'poly':
-    #     lr_func = lambda epoch: (1 - epoch / args.epochs) ** args.lr_power
-    #     lr_scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_func)
-    # elif args.lr_scheduler == 'halfdecay':
-    #     lr_func = lambda epoch: 0.5 ** (epoch // (args.epochs // 10))
-    #     lr_scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_func)
-    # elif args.lr_scheduler == 'cosine':
-    #     lr_func = lambda epoch: 0.5 * (1. + math.cos(math.pi * epoch / args.epochs))
-    #     lr_scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_func)
-    # elif args.lr_scheduler == 'step':
-    #     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, args.lr_drop)
-    # else:
-    #     raise ValueError('Lr scheduler type not supportted ')
     
     # using AdamW optimizer and MultiStepLr scheduler
     optimizer = torch.optim.AdamW(param_list, lr=args.lr, weight_decay=args.weight_decay)
