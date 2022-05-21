@@ -13,11 +13,10 @@ class LinguisticModel(nn.Module):
                  pretrained_backbone, 
                  frozen_embedding=False,
                  frozen_encoder=False,
-                 prompt_tuning=False,
+                 embed_dim=384
                  ):
         super().__init__()
-        self.prompt_tuning = prompt_tuning
-        self.frozen_encoder = frozen_encoder if not self.prompt_tuning else True
+        self.frozen_encoder = frozen_encoder
         self.frozen_embedding = frozen_embedding if not self.frozen_encoder else True
         self.num_channels = 768
 
@@ -28,15 +27,7 @@ class LinguisticModel(nn.Module):
             encoder_layers.append(pretrained_backbone.encoder.layer[i])
         self.encoder = nn.ModuleList(encoder_layers)
 
-        # self.encoder = pretrained_backbone.encoder
-        # self.pooler = pretrained_backbone.pooler
-        
-        if self.prompt_tuning:
-            self.num_prompt_tokens = 8
-            self.prompt_tokens = nn.Parameter(torch.zeros(len(self.encoder), self.num_prompt_tokens, self.num_channels))
-            # self.prompt_tokens = nn.Parameter(torch.zeros(1, self.num_prompt_tokens, self.num_channels))
-            nn.init.normal_(self.prompt_tokens, std=0.02)
-        
+        self.text_proj = nn.Linear(self.num_channels, embed_dim)
         self._freeze_params()
 
     def _freeze_params(self):
@@ -54,52 +45,41 @@ class LinguisticModel(nn.Module):
         ling_src, ling_mask = tensor_list.decompose()
         ling_src = self.embeddings(ling_src)
         
-        if self.prompt_tuning:
-            batch_size, num_src, C = ling_src.shape
-            prompt_mask = torch.ones(batch_size, self.num_prompt_tokens, dtype=ling_mask.dtype, device=ling_src.device)
-            extended_mask = torch.cat([ling_mask, prompt_mask], dim=1)
-            extended_mask = extended_mask[:, None, None, :]
-            outputs = ling_src
-            for i, layer in enumerate(self.encoder):
-                prompt_src = self.prompt_tokens[i:i+1].expand(batch_size, -1, -1)
-                outputs = torch.cat([outputs, prompt_src], dim=1)
-                outputs = layer(outputs, attention_mask=extended_mask)[0]
-                outputs = outputs[:, :num_src, :]
+        extended_mask = ling_mask[:, None, None, :]
+        outputs = ling_src
+        for layer in self.encoder:
+            outputs = layer(outputs, attention_mask=extended_mask)[0]
+        # outputs = self.encoder(ling_src, attention_mask=extended_mask)
 
-        else:
-            extended_mask = ling_mask[:, None, None, :]
-            outputs = ling_src
-            for layer in self.encoder:
-                outputs = layer(outputs, attention_mask=extended_mask)[0]
-            # outputs = self.encoder(ling_src, attention_mask=extended_mask)
+        text_src = self.text_proj(outputs)
+        text_mask = ~ling_mask.to(torch.bool)
 
-        xs = outputs
-        # xs = outputs.last_hidden_state
-        
-        # mask = tensor_list.mask.to(torch.bool)
-        mask = ling_mask.to(torch.bool)
-        mask = ~mask
-        out = NestedTensor(xs, mask)
-
-        return out
+        return text_src, text_mask
 
 def build_linguistic_branch(args):
     
-    # if args.bert_model == 'bert-base-uncased':
-    #     bert_model = BertModel
-    # elif args.bert_model == 'roberta-base':
-    #     bert_model = RobertaModel
-    # else:
-    #     raise ValueError('Only support bert-base-uncased or roberta-base')
-    assert args.bert_model == 'roberta-base'
-    bert_model = RobertaModel
+    if args.bert_model == 'bert-base-uncased':
+        bert_model = BertModel
+    elif args.bert_model == 'roberta-base':
+        bert_model = RobertaModel
+    else:
+        raise ValueError('Only support bert-base-uncased or roberta-base')
+    # assert args.bert_model == 'roberta-base'
+    # bert_model = RobertaModel
 
     bert_model = bert_model.from_pretrained(args.pretrained_lm_path + '/' + args.bert_model)
 
+    if args.vit_model == 'tiny':
+        embed_dim = 192
+    elif args.vit_model == 'small':
+        embed_dim = 384
+    elif args.vit_model == 'base':
+        embed_dim = 768
+        
     model = LinguisticModel(bert_model, 
                             frozen_embedding=args.language_frozen_embedding,
                             frozen_encoder=args.langauge_frozen_encoder,
-                            prompt_tuning=args.language_prompt_tuning
+                            embed_dim=embed_dim
                             )
     
     return model

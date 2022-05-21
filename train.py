@@ -22,18 +22,14 @@ from engine import train_one_epoch, validate
 def get_args_parser():
     parser = argparse.ArgumentParser('Set transformer detector', add_help=False)
     parser.add_argument('--lr', default=1e-4, type=float)
-    parser.add_argument('--lr_vit', default=1e-5, type=float)
-    parser.add_argument('--lr_bert', default=1e-5, type=float)
-    parser.add_argument('--batch_size', default=8, type=int)
+    parser.add_argument('--lr_vision', default=1e-5, type=float)
+    parser.add_argument('--lr_language', default=1e-5, type=float)
     parser.add_argument('--weight_decay', default=1e-4, type=float)
-    parser.add_argument('--epochs', default=90, type=int)
-    parser.add_argument('--lr_power', default=0.9, type=float, help='lr poly power')
-    parser.add_argument('--clip_max_norm', default=0., type=float,
-                        help='gradient clipping max norm')
+    parser.add_argument('--batch_size', default=4, type=int)
+    parser.add_argument('--clip_max_norm', default=0., type=float, help='gradient clipping max norm')
     parser.add_argument('--eval', dest='eval', default=False, action='store_true', help='if evaluation only')
-    parser.add_argument('--optimizer', default='adamw', type=str)
-    parser.add_argument('--lr_scheduler', default='step', type=str)
-    parser.add_argument('--lr_drop', default=60, type=int)
+    parser.add_argument('--epochs', default=60, type=int)
+    parser.add_argument('--lr_drop', nargs="+", default=[45, 58])
     
     # Augmentation options
     parser.add_argument('--aug_crop', action='store_true',
@@ -43,57 +39,40 @@ def get_args_parser():
     parser.add_argument('--aug_translate', action='store_true',
                         help="If true, use random translate augmentation")
 
-    # Model parameters
-    parser.add_argument('--model_name', type=str, default='TransVG',
-                        help="Name of model to be exploited.")
-    
-    # DETR parameters
-    # * Backbone
-    parser.add_argument('--backbone', default='resnet50', type=str,
-                        help="Name of the convolutional backbone to use")
-    parser.add_argument('--dilation', action='store_true',
-                        help="If true, we replace stride with dilation in the last convolutional block (DC5)")
-    parser.add_argument('--position_embedding', default='sine', type=str, choices=('sine', 'learned'), 
-                        help="Type of positional embedding to use on top of the image features")
+    # Architecture options
     parser.add_argument('--imsize', default=640, type=int, help='image size')
-    parser.add_argument('--visual_model_stride', default=32, type=int, help='stride of vision feature')
-    parser.add_argument('--emb_size', default=512, type=int,
-                        help='fusion module embedding dimensions')
-
-    # Transformers in two branches
-    parser.add_argument('--bert_enc_num', default=12, type=int)
-    parser.add_argument('--detr_enc_num', default=0, type=int)
     parser.add_argument('--bert_model', default='roberta-base', type=str, help='bert model')
     parser.add_argument('--vit_model', default='small', type=str, help='vit model')
     parser.add_argument('--separate_qkv', action='store_true')
 
     # Vision-Language Transformer
-    parser.add_argument('--vl_dropout', default=0.1, type=float,
-                        help="Dropout applied in the vision-language transformer")
-    parser.add_argument('--vl_nheads', default=8, type=int,
-                        help="Number of attention heads inside the vision-language transformer's attentions")
-    parser.add_argument('--vl_hidden_dim', default=256, type=int,
-                        help='Size of the embeddings (dimension of the vision-language transformer)')
-    parser.add_argument('--vl_dim_feedforward', default=2048, type=int,
-                        help="Intermediate size of the feedforward layers in the vision-language transformer blocks")
-    parser.add_argument('--vl_depth', default=6, type=int,
-                        help='Number of encoders in the vision-language transformer')
-    parser.add_argument('--vl_normalize_before', action='store_true')
-    parser.add_argument('--vl_activation', default='relu', type=str)
-    parser.add_argument('--avg_valid_tokens', action='store_true')
+    # parser.add_argument('--vl_dropout', default=0.1, type=float,
+    #                     help="Dropout applied in the vision-language transformer")
+    # parser.add_argument('--vl_nheads', default=8, type=int,
+    #                     help="Number of attention heads inside the vision-language transformer's attentions")
+    # parser.add_argument('--vl_hidden_dim', default=256, type=int,
+    #                     help='Size of the embeddings (dimension of the vision-language transformer)')
+    # parser.add_argument('--vl_dim_feedforward', default=2048, type=int,
+    #                     help="Intermediate size of the feedforward layers in the vision-language transformer blocks")
+    # parser.add_argument('--vl_depth', default=6, type=int,
+    #                     help='Number of encoders in the vision-language transformer')
+    # parser.add_argument('--vl_normalize_before', action='store_true')
+    # parser.add_argument('--vl_activation', default='relu', type=str)
+    # parser.add_argument('--avg_valid_tokens', action='store_true')
+    
+    # parser.add_argument('--use_block_v2', action='store_true')
     parser.add_argument('--reg_out_type', default='reg_input', type=str, 
                         help='option for output regression source feature')
-    parser.add_argument('--use_block_v2', action='store_true')
     parser.add_argument('--language_modulation', type=str, default='cross_attn',
                         help='language_modulation should be one of ["cross_attn", "concat_linear", "cls_token"]')
     parser.add_argument('--num_modulation', type=int, default=4, help='number of v-l blocks')
     parser.add_argument('--modulate_in_last_blocks', action='store_true')
     parser.add_argument('--reg_token_in_last_blocks', action='store_true')
     parser.add_argument('--without_visual_mask', action='store_true')
-    parser.add_argument('--num_vpt', type=int, default=0)
+    # parser.add_argument('--num_vpt', type=int, default=0)
 
     # Language Branch
-    parser.add_argument('--language_prompt_tuning', action='store_true')
+    # parser.add_argument('--language_prompt_tuning', action='store_true')
     parser.add_argument('--language_frozen_embedding', action='store_true')
     parser.add_argument('--langauge_frozen_encoder', action='store_true')
     parser.add_argument('--max_query_len', default=20, type=int,
@@ -155,8 +134,8 @@ def main(args):
     rest_param = [p for n, p in model_without_ddp.named_parameters() if (("visual_branch" not in n) and ("linguistic_branch" not in n) and p.requires_grad)]
 
     param_list = [{"params": rest_param},
-                  {"params": visu_param, "lr": args.lr_vit},
-                  {"params": text_param, "lr": args.lr_bert},
+                  {"params": visu_param, "lr": args.lr_vision},
+                  {"params": text_param, "lr": args.lr_language},
                  ]
 
     # visu_param = [p for n, p in model_without_ddp.named_parameters() if "visumodel" in n and p.requires_grad]
@@ -166,32 +145,38 @@ def main(args):
     frozen_params = [n for n, p in model_without_ddp.named_parameters() if not p.requires_grad]
     print('Frozen parameters', frozen_params)
     
-    # using RMSProp or AdamW
-    if args.optimizer == 'rmsprop':
-        optimizer = torch.optim.RMSprop(param_list, lr=args.lr, weight_decay=args.weight_decay)
-    elif args.optimizer == 'adamw':
-        optimizer = torch.optim.AdamW(param_list, lr=args.lr, weight_decay=args.weight_decay)
-    elif args.optimizer == 'adam':
-        optimizer = torch.optim.Adam(param_list, lr=args.lr, weight_decay=args.weight_decay)
-    elif args.optimizer == 'sgd':
-        optimizer = torch.optim.SGD(param_list, lr=args.lr, weight_decay=args.weight_decay, momentum=0.9)
-    else:
-        raise ValueError('Lr scheduler type not supportted ')
+    # # using RMSProp or AdamW
+    # if args.optimizer == 'rmsprop':
+    #     optimizer = torch.optim.RMSprop(param_list, lr=args.lr, weight_decay=args.weight_decay)
+    # elif args.optimizer == 'adamw':
+    #     optimizer = torch.optim.AdamW(param_list, lr=args.lr, weight_decay=args.weight_decay)
+    # elif args.optimizer == 'adam':
+    #     optimizer = torch.optim.Adam(param_list, lr=args.lr, weight_decay=args.weight_decay)
+    # elif args.optimizer == 'sgd':
+    #     optimizer = torch.optim.SGD(param_list, lr=args.lr, weight_decay=args.weight_decay, momentum=0.9)
+    # else:
+    #     raise ValueError('Lr scheduler type not supportted ')
+    
+    # if args.lr_scheduler == 'poly':
+    #     lr_func = lambda epoch: (1 - epoch / args.epochs) ** args.lr_power
+    #     lr_scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_func)
+    # elif args.lr_scheduler == 'halfdecay':
+    #     lr_func = lambda epoch: 0.5 ** (epoch // (args.epochs // 10))
+    #     lr_scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_func)
+    # elif args.lr_scheduler == 'cosine':
+    #     lr_func = lambda epoch: 0.5 * (1. + math.cos(math.pi * epoch / args.epochs))
+    #     lr_scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_func)
+    # elif args.lr_scheduler == 'step':
+    #     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, args.lr_drop)
+    # else:
+    #     raise ValueError('Lr scheduler type not supportted ')
+    
+    # using AdamW optimizer and MultiStepLr scheduler
+    optimizer = torch.optim.AdamW(param_list, lr=args.lr, weight_decay=args.weight_decay)
+    lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, args.lr_drop)
 
     # using polynomial lr scheduler or half decay every 10 epochs or step
-    if args.lr_scheduler == 'poly':
-        lr_func = lambda epoch: (1 - epoch / args.epochs) ** args.lr_power
-        lr_scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_func)
-    elif args.lr_scheduler == 'halfdecay':
-        lr_func = lambda epoch: 0.5 ** (epoch // (args.epochs // 10))
-        lr_scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_func)
-    elif args.lr_scheduler == 'cosine':
-        lr_func = lambda epoch: 0.5 * (1. + math.cos(math.pi * epoch / args.epochs))
-        lr_scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_func)
-    elif args.lr_scheduler == 'step':
-        lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, args.lr_drop)
-    else:
-        raise ValueError('Lr scheduler type not supportted ')
+
 
     # build dataset
     dataset_train = build_dataset('train', args)
@@ -283,7 +268,7 @@ def main(args):
         if args.output_dir:
             checkpoint_paths = [output_dir / 'checkpoint.pth']
             # extra checkpoint before LR drop
-            if (epoch + 1) >= args.lr_drop == 0:
+            if (epoch + 1) == args.lr_drop:
                 checkpoint_paths.append(output_dir / f'checkpoint{epoch:04}.pth')
             if val_stats['accu'] > best_accu:
                 checkpoint_paths.append(output_dir / 'best_checkpoint.pth')

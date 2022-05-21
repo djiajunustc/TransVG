@@ -8,32 +8,31 @@ from .linguistic_branch import build_linguistic_branch
 # experiments
 from .visual_branch_prompt_fusion import build_visual_branch_prompt_fusion
 
+
 class LViT(nn.Module):
     def __init__(self, args):
         super(LViT, self).__init__()
-        hidden_dim = args.vl_hidden_dim
-        
+
         self.linguistic_branch = build_linguistic_branch(args)
+
         if args.language_modulation == 'prompt_fusion':
             self.visual_branch = build_visual_branch_prompt_fusion(args)
         else:
             self.visual_branch = build_visual_branch(args)
 
-        self.text_proj = nn.Linear(self.linguistic_branch.num_channels, hidden_dim)
+        # self.text_proj = nn.Linear(self.linguistic_branch.num_channels, hidden_dim)
 
-        self.bbox_embed = MLP(hidden_dim, 256, 4, 3)
+        self.bbox_embed = MLP(self.visual_branch.num_channels, 256, 4, 3)
 
     def forward(self, img_data, text_data):
         bs = img_data.tensors.shape[0]
 
         # Language branch
-        ling_out = self.linguistic_branch(text_data)
-        ling_src, ling_mask = ling_out.decompose()
-        ling_src = self.text_proj(ling_src)
+        text_src, text_mask = self.linguistic_branch(text_data)
 
         # Visual-Linguistic module
         visu_src, visu_mask = img_data.decompose()
-        reg_src = self.visual_branch(visu_src, ling_src, visu_mask, ling_mask)
+        reg_src = self.visual_branch(visu_src, text_src, visu_mask, text_mask)
 
         pred_box = self.bbox_embed(reg_src).sigmoid()
 

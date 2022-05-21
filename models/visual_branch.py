@@ -489,7 +489,7 @@ def build_visual_branch(args):
                               modulate_in_last_blocks=args.modulate_in_last_blocks,
                               reg_token_in_last_blocks=args.reg_token_in_last_blocks,
                               without_visual_mask=args.without_visual_mask,
-                              num_vpt=args.num_vpt
+                            #   num_vpt=args.num_vpt
                               )
 
     return model
