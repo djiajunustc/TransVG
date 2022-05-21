@@ -29,7 +29,7 @@ def get_args_parser():
     parser.add_argument('--clip_max_norm', default=0., type=float, help='gradient clipping max norm')
     parser.add_argument('--eval', dest='eval', default=False, action='store_true', help='if evaluation only')
     parser.add_argument('--epochs', default=60, type=int)
-    parser.add_argument('--lr_drop', nargs="+", default=[45, 58])
+    parser.add_argument('--lr_drop', nargs="+", default=[45, 58], type=int)
     
     # Augmentation options
     parser.add_argument('--aug_crop', action='store_true',
