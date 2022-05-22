@@ -112,14 +112,20 @@ def main(args):
     n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print('number of params:', n_parameters)
 
-    visu_param = [p for n, p in model_without_ddp.named_parameters() if (("visual_branch" in n) and p.requires_grad)]
     text_param = [p for n, p in model_without_ddp.named_parameters() if (("language_branch" in n) and p.requires_grad)]
-    rest_param = [p for n, p in model_without_ddp.named_parameters() if (("visual_branch" not in n) and ("language_branch" not in n) and p.requires_grad)]
+    visu_param = [p for n, p in model_without_ddp.named_parameters() if (("visual_branch" in n) and ("lang_modulation" not in n) and p.requires_grad)]
+    rest_param = [p for n, p in model_without_ddp.named_parameters() if (("visual_branch" in n) and ("lang_modulation" in n) and p.requires_grad)]
+    rest_param = rest_param + [p for n, p in model_without_ddp.named_parameters() if (("visual_branch" not in n) and ("language_branch" not in n) and p.requires_grad)]
 
     param_list = [{"params": rest_param},
                   {"params": visu_param, "lr": args.lr_vision},
                   {"params": text_param, "lr": args.lr_language},
                  ]
+
+    text_param = [n for n, p in model_without_ddp.named_parameters() if (("language_branch" in n) and p.requires_grad)]
+    visu_param = [n for n, p in model_without_ddp.named_parameters() if (("visual_branch" in n) and ("lang_modulation" not in n) and p.requires_grad)]
+    rest_param = [n for n, p in model_without_ddp.named_parameters() if (("visual_branch" in n) and ("lang_modulation" in n) and p.requires_grad)]
+    rest_param = rest_param + [n for n, p in model_without_ddp.named_parameters() if (("visual_branch" not in n) and ("language_branch" not in n) and p.requires_grad)]
 
     # visu_param = [p for n, p in model_without_ddp.named_parameters() if "visumodel" in n and p.requires_grad]
     # text_param = [p for n, p in model_without_ddp.named_parameters() if "textmodel" in n and p.requires_grad]
