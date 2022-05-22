@@ -20,7 +20,8 @@ class LViT(nn.Module):
         else:
             self.visual_branch = build_visual_branch(args, text_token_dim=self.language_branch.num_channels)
 
-        # self.text_proj = nn.Linear(self.linguistic_branch.num_channels, hidden_dim)
+        embed_dim = self.visual_branch.embed_dim
+        self.text_proj = nn.Linear(self.language_branch.num_channels, embed_dim)
 
         self.prediction_head = MLP(self.visual_branch.num_channels, 256, 4, 3)
 
@@ -30,6 +31,7 @@ class LViT(nn.Module):
         
         # Language branch
         text_src, text_mask = self.language_branch(text_src, text_mask)
+        text_src = self.text_proj(text_src)
 
         # Language conditioned vision branch
         reg_src = self.visual_branch(visu_src, text_src, visu_mask, text_mask)

@@ -92,7 +92,6 @@ class VisionTransformer(nn.Module):
     """ Vision Transformers """
     def __init__(self, 
                  img_size=640, 
-                 text_token_dim=768,
                  patch_size=16, 
                  in_chans=3, 
                  embed_dim=768, 
@@ -145,8 +144,6 @@ class VisionTransformer(nn.Module):
 
         norm_layer = partial(nn.LayerNorm, eps=1e-6)
         act_layer = nn.GELU
-
-        self.text_proj = nn.Linear(text_token_dim, embed_dim)
 
         self.patch_embed = PatchEmbed(
             img_size=img_size, patch_size=patch_size, in_chans=in_chans, embed_dim=embed_dim, flatten=False)
@@ -306,9 +303,6 @@ class VisionTransformer(nn.Module):
 
 
     def forward(self, visu_src, text_src, visu_mask, text_mask):
-        # language features projection
-        text_src = self.text_proj(text_src)
-
         if self.reg_out_type == 'reg_token':
             return self._forward_with_reg_token(visu_src, text_src, visu_mask, text_mask)
         elif self.reg_out_type == 'avg_out':
@@ -321,7 +315,7 @@ class VisionTransformer(nn.Module):
         self.pos_embed = nn.Parameter(resized_pos_embed)
 
 
-def build_visual_branch(args, text_token_dim):
+def build_visual_branch(args):
     if args.vit_model == 'tiny':
         embed_dim, num_heads, mlp_ratio = 192, 3, 4
     elif args.vit_model == 'small':
@@ -332,7 +326,6 @@ def build_visual_branch(args, text_token_dim):
         embed_dim, num_heads, mlp_ratio = 256, 8, 8
     
     model = VisionTransformer(img_size=args.imsize,
-                              text_token_dim=text_token_dim, 
                               embed_dim=embed_dim, 
                               num_heads=num_heads, 
                               mlp_ratio=mlp_ratio, 
