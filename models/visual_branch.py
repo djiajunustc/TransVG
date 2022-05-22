@@ -64,7 +64,6 @@ class Block(nn.Module):
         self.language_modulation= language_modulation
         if self.language_modulation is not None:
             if self.language_modulation == 'cross_attn':
-                self.norm3 = norm_layer(dim)
                 self.lang_modulation = AttentionV2(dim, num_heads=num_heads, qkv_bias=qkv_bias, attn_drop=attn_drop, proj_drop=drop)
             elif self.language_modulation == 'avg_pooling':
                 self.lang_modulation = AvgPoolingModulation(dim=dim, mlp_ratio=mlp_ratio, act_layer=act_layer, norm_layer=norm_layer)
@@ -79,7 +78,7 @@ class Block(nn.Module):
             assert y is not None
         
         if self.language_modulation == 'cross_attn':
-            x = x + self.drop_path(self.lang_modulation(self.norm3(x), y, y, y_attn_mask))
+            x = x + self.drop_path(self.lang_modulation(x, y, y, y_attn_mask))
         elif self.language_modulation == 'avg_pooling':
             x = x + self.drop_path(self.lang_modulation(y, y_mask))
         
