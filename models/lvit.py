@@ -18,7 +18,7 @@ class LViT(nn.Module):
         if args.language_modulation == 'prompt_fusion':
             self.visual_branch = build_visual_branch_prompt_fusion(args)
         else:
-            self.visual_branch = build_visual_branch(args, text_token_dim=self.language_branch.num_channels)
+            self.visual_branch = build_visual_branch(args)
 
         embed_dim = self.visual_branch.embed_dim
         self.text_proj = nn.Linear(self.language_branch.num_channels, embed_dim)
