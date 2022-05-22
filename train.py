@@ -107,14 +107,14 @@ def main(args):
 
     model_without_ddp = model
     if args.distributed:
-        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], find_unused_parameters=False)
+        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], find_unused_parameters=True)
         model_without_ddp = model.module
     n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print('number of params:', n_parameters)
 
     visu_param = [p for n, p in model_without_ddp.named_parameters() if (("visual_branch" in n) and p.requires_grad)]
-    text_param = [p for n, p in model_without_ddp.named_parameters() if (("linguistic_branch" in n) and p.requires_grad)]
-    rest_param = [p for n, p in model_without_ddp.named_parameters() if (("visual_branch" not in n) and ("linguistic_branch" not in n) and p.requires_grad)]
+    text_param = [p for n, p in model_without_ddp.named_parameters() if (("language_branch" in n) and p.requires_grad)]
+    rest_param = [p for n, p in model_without_ddp.named_parameters() if (("visual_branch" not in n) and ("language_branch" not in n) and p.requires_grad)]
 
     param_list = [{"params": rest_param},
                   {"params": visu_param, "lr": args.lr_vision},

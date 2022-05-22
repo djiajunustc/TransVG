@@ -25,9 +25,14 @@ class AvgPoolingModulation(nn.Module):
         self.fc1 = nn.Linear(dim, hidden_dim)
         self.fc2 = nn.Linear(hidden_dim, dim)
 
-    def forward(self, x):
+    def forward(self, x, x_mask):
         x = self.fc1(x)
-        x = torch.mean(x, dim=1, keepdim=True)
+        
+        x_mask = (~x_mask).float()
+        x_mask = x_mask[:, :, None]
+        x_sum = torch.sum(x * x_mask, dim=1, keepdim=True)
+        x = x_sum * (1. / x_mask.sum(dim=1, keepdim=True))
+
         x = self.fc2(x)
 
         return x
@@ -66,7 +71,7 @@ class Block(nn.Module):
             else:
                 raise ValueError('language_modulation can only be one of ["cross_attn", "avg_pooling"]')
 
-    def forward(self, x, y=None, x_attn_mask=None, y_attn_mask=None):
+    def forward(self, x, y=None, x_attn_mask=None, y_attn_mask=None, y_mask=None):
         norm_x = self.norm1(x)
         x = x + self.drop_path(self.attn(norm_x, norm_x, norm_x, x_attn_mask))
         
@@ -76,7 +81,7 @@ class Block(nn.Module):
         if self.language_modulation == 'cross_attn':
             x = x + self.drop_path(self.lang_modulation(self.norm3(x), y, y, y_attn_mask))
         elif self.language_modulation == 'avg_pooling':
-            x = x + self.drop_path(self.lang_modulation(y))
+            x = x + self.drop_path(self.lang_modulation(y, y_mask))
         
         x = x + self.drop_path(self.mlp(self.norm2(x)))
         
@@ -87,6 +92,7 @@ class VisionTransformer(nn.Module):
     """ Vision Transformers """
     def __init__(self, 
                  img_size=640, 
+                 text_token_dim=768,
                  patch_size=16, 
                  in_chans=3, 
                  embed_dim=768, 
@@ -139,6 +145,8 @@ class VisionTransformer(nn.Module):
 
         norm_layer = partial(nn.LayerNorm, eps=1e-6)
         act_layer = nn.GELU
+
+        self.text_proj = nn.Linear(text_token_dim, embed_dim)
 
         self.patch_embed = PatchEmbed(
             img_size=img_size, patch_size=patch_size, in_chans=in_chans, embed_dim=embed_dim, flatten=False)
@@ -217,7 +225,7 @@ class VisionTransformer(nn.Module):
         visu_src = visu_src.flatten(2).transpose(1, 2)
         reg_src  = self.reg_token.expand(batch_size, -1, -1)
 
-        ling_mask = ling_mask.view(batch_size, 1, 1, -1).expand(-1, self.num_heads, -1, -1)
+        ling_attn_mask = ling_mask.view(batch_size, 1, 1, -1).expand(-1, self.num_heads, -1, -1)
         
         if self.without_visual_mask:
             visu_mask = None
@@ -236,7 +244,7 @@ class VisionTransformer(nn.Module):
                 if i not in self.modulation_loc:
                     visu_src = block(visu_src, visu_mask)
                 else:
-                    visu_src = block(visu_src, ling_src, visu_mask, ling_mask)
+                    visu_src = block(visu_src, ling_src, visu_mask, ling_attn_mask, ling_mask)
         else:
             
             for i in range(len(self.blocks) - len(self.modulation_loc)):
@@ -297,12 +305,14 @@ class VisionTransformer(nn.Module):
         return reg_src
 
 
-    def forward(self, visu_src, ling_src, visu_mask, ling_mask):
+    def forward(self, visu_src, text_src, visu_mask, text_mask):
+        # language features projection
+        text_src = self.text_proj(text_src)
 
         if self.reg_out_type == 'reg_token':
-            return self._forward_with_reg_token(visu_src, ling_src, visu_mask, ling_mask)
+            return self._forward_with_reg_token(visu_src, text_src, visu_mask, text_mask)
         elif self.reg_out_type == 'avg_out':
-            return self._forward_with_avg_out(visu_src,ling_src, visu_mask, ling_mask)
+            return self._forward_with_avg_out(visu_src, text_src, visu_mask, text_mask)
         else:
             raise ValueError('reg_out_type should be one of ["reg_token", "avg_out"]')
 
@@ -311,7 +321,7 @@ class VisionTransformer(nn.Module):
         self.pos_embed = nn.Parameter(resized_pos_embed)
 
 
-def build_visual_branch(args):
+def build_visual_branch(args, text_token_dim):
     if args.vit_model == 'tiny':
         embed_dim, num_heads, mlp_ratio = 192, 3, 4
     elif args.vit_model == 'small':
@@ -321,7 +331,8 @@ def build_visual_branch(args):
     elif args.vit_model == 'detr_like':
         embed_dim, num_heads, mlp_ratio = 256, 8, 8
     
-    model = VisionTransformer(img_size=args.imsize, 
+    model = VisionTransformer(img_size=args.imsize,
+                              text_token_dim=text_token_dim, 
                               embed_dim=embed_dim, 
                               num_heads=num_heads, 
                               mlp_ratio=mlp_ratio, 

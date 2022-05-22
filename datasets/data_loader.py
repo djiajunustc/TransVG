@@ -22,7 +22,7 @@ sys.path.append('.')
 
 from PIL import Image
 # from transformers import AutoTokenizer
-from transformers import RobertaTokenizerFast, BertTokenizer
+from transformers import RobertaTokenizerFast, BertTokenizerFast
 # from pytorch_pretrained_bert.tokenization import BertTokenizer
 from utils.word_utils import Corpus
 
@@ -166,9 +166,9 @@ class TransVGDataset(data.Dataset):
         self.testmode = testmode
         self.split = split
         if bert_model == 'bert-base-uncased':
-            self.tokenizer = BertTokenizer.from_pretrained(pretrained_lm_path + '/' + bert_model, do_lower_case=True)
+            self.tokenizer = BertTokenizerFast.from_pretrained(pretrained_lm_path + '/' + bert_model, do_lower_case=True, do_basic_tokenize=False)
         elif bert_model == 'roberta-base':
-            self.tokenizer = RobertaTokenizerFast.from_pretrained(pretrained_lm_path + '/' + bert_model)
+            self.tokenizer = RobertaTokenizerFast.from_pretrained(pretrained_lm_path + '/' + bert_model, do_lower_case=True, do_basic_tokenize=False)
         else:
             raise ValueError('Only support bert-base-uncased or roberta-base')
 
