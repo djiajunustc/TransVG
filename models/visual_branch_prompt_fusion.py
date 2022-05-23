@@ -136,11 +136,11 @@ class VisionTransformer(nn.Module):
 
         self.norm = norm_layer(embed_dim)
         
-        self.language_position = nn.Parameter(torch.zeros(num_modulation, self.query_len, embed_dim))
+        self.lang_modulation_embedding = nn.Parameter(torch.zeros(num_modulation, self.query_len, embed_dim))
         pre_fusion_blocks_list = []
         for i in range(num_modulation):
             pre_fusion_blocks_list.append(basic_block())
-        self.pre_fusion_blocks = nn.ModuleList(pre_fusion_blocks_list)
+        self.lang_modulation_pre_blocks = nn.ModuleList(pre_fusion_blocks_list)
 
         if self.num_vpt > 0:
             assert self.modulate_in_last_blocks and self.reg_token_in_last_blocks, \
@@ -187,9 +187,9 @@ class VisionTransformer(nn.Module):
             if i not in self.modulation_loc:
                 src = block(src, mask)
             else:
-                this_lang_pos = self.language_position[count_modulation].unsqueeze(0).expand(batch_size, -1, -1)
+                this_lang_pos = self.lang_modulation_embedding[count_modulation].unsqueeze(0).expand(batch_size, -1, -1)
                 this_lang_src = ling_src + this_lang_pos
-                this_lang_src = self.pre_fusion_blocks[count_modulation](this_lang_src, ling_mask)
+                this_lang_src = self.lang_modulation_pre_blocks[count_modulation](this_lang_src, ling_mask)
                 this_src = torch.cat([src, this_lang_src], dim=1)
                 this_mask = torch.cat([mask, ling_mask], dim=-1)
                 this_src = block(this_src, this_mask)
