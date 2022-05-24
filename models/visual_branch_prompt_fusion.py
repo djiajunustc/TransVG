@@ -10,6 +10,32 @@ from timm.models.layers import Mlp, DropPath #, trunc_normal_, lecun_normal_
 from .layers import AttentionV2, PatchEmbed
 
 
+class PrePromptBlock(nn.Module):
+
+    def __init__(self,
+                 dim,
+                 mlp_ratio=4.,
+                 act_layer=nn.GELU, 
+                 drop=0.,
+                 norm_layer=nn.LayerNorm,
+                 ):
+        super().__init__()
+        mlp_hidden_dim = int(dim * mlp_ratio)
+        self.mlp = Mlp(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop)
+        self.bias_embedding = nn.Parameter(torch.zeros(1, 1, dim))
+        self.norm = norm_layer(dim)
+        self.relu = nn.GELU()
+        self.fc_out = nn.Linear(dim, dim)
+
+    def forward(self, x):
+        x = x + self.bias_embedding
+        x = x + self.mlp(self.norm(x))
+        x = self.relu(x)
+        x = self.fc_out(x)
+        
+        return x
+
+
 class Block(nn.Module):
 
     def __init__(self, 
@@ -136,16 +162,14 @@ class VisionTransformer(nn.Module):
         self.norm = norm_layer(embed_dim)
         
         if self.language_modulation == 'deep_prompt':
-            self.lang_modulation_embedding = nn.Parameter(torch.zeros(num_modulation, self.query_len, embed_dim))
             pre_fusion_blocks_list = []
             for i in range(num_modulation):
-                pre_fusion_blocks_list.append(basic_block())
+                pre_fusion_blocks_list.append(PrePromptBlock(embed_dim))
             self.lang_modulation_pre_blocks = nn.ModuleList(pre_fusion_blocks_list)
         elif self.language_modulation == 'shallow_prompt':
-            self.lang_modulation_embedding = nn.Parameter(torch.zeros(1, self.query_len, embed_dim))
             pre_fusion_blocks_list = []
             for i in range(1):
-                pre_fusion_blocks_list.append(basic_block())
+                pre_fusion_blocks_list.append(PrePromptBlock(embed_dim))
             self.lang_modulation_pre_blocks = nn.ModuleList(pre_fusion_blocks_list)
 
         self._reset_parameters()
@@ -188,9 +212,8 @@ class VisionTransformer(nn.Module):
             if i not in self.modulation_loc:
                 src = block(src, mask)
             else:
-                this_lang_pos = self.lang_modulation_embedding[count_modulation].unsqueeze(0).expand(batch_size, -1, -1)
-                this_lang_src = ling_src + this_lang_pos
-                this_lang_src = self.lang_modulation_pre_blocks[count_modulation](this_lang_src, ling_mask)
+                this_lang_src = ling_src
+                this_lang_src = self.lang_modulation_pre_blocks[count_modulation](this_lang_src)
                 this_src = torch.cat([src, this_lang_src], dim=1)
                 this_mask = torch.cat([mask, ling_mask], dim=-1)
                 this_src = block(this_src, this_mask)
@@ -218,9 +241,9 @@ class VisionTransformer(nn.Module):
         visu_mask = torch.zeros(batch_size, 1+visu_src.shape[1], dtype=visu_src.dtype, device=visu_src.device)
         visu_mask = visu_mask.view(batch_size, 1, 1, -1).expand(-1, self.num_heads, -1, -1)
         
-
+        # ling_src = ling_src 
         for block in self.lang_modulation_pre_blocks:
-            ling_src = block(ling_src, ling_mask)
+            ling_src = block(ling_src)
         
         src = torch.cat([reg_src, visu_src, ling_src], dim=1)
         mask = torch.cat([visu_mask, ling_mask], dim=-1)
