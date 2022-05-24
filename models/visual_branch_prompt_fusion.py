@@ -55,6 +55,7 @@ class VisionTransformer(nn.Module):
                  attn_drop_rate=0., 
                  drop_path_rate=0., 
                  reg_out_type='reg_token',
+                 language_modulation='deep_prompt',
                  language_query_max_len=20,
                  num_modulation=4,
                  modulate_in_last_blocks=False,
@@ -84,6 +85,7 @@ class VisionTransformer(nn.Module):
         self.num_heads = num_heads
         # self.modulation_loc = modulation_loc
         self.reg_out_type = reg_out_type
+        self.language_modulation = language_modulation
         self.reg_token_in_last_blocks = reg_token_in_last_blocks
         self.modulate_in_last_blocks = modulate_in_last_blocks
         self.without_visual_mask = without_visual_mask
@@ -133,16 +135,18 @@ class VisionTransformer(nn.Module):
 
         self.norm = norm_layer(embed_dim)
         
-        self.lang_modulation_embedding = nn.Parameter(torch.zeros(num_modulation, self.query_len, embed_dim))
-        pre_fusion_blocks_list = []
-        for i in range(num_modulation):
-            pre_fusion_blocks_list.append(basic_block())
-        self.lang_modulation_pre_blocks = nn.ModuleList(pre_fusion_blocks_list)
-
-        if self.num_vpt > 0:
-            assert self.modulate_in_last_blocks and self.reg_token_in_last_blocks, \
-                'When using prompt tuning, vl-modulation conducted in last blocks and reg_token added in last blocks'
-            self.prompt_tokens = nn.Parameter(torch.zeros(depth - num_modulation, self.num_vpt, embed_dim))
+        if self.language_modulation == 'deep_prompt':
+            self.lang_modulation_embedding = nn.Parameter(torch.zeros(num_modulation, self.query_len, embed_dim))
+            pre_fusion_blocks_list = []
+            for i in range(num_modulation):
+                pre_fusion_blocks_list.append(basic_block())
+            self.lang_modulation_pre_blocks = nn.ModuleList(pre_fusion_blocks_list)
+        elif self.language_modulation == 'shallow_prompt':
+            self.lang_modulation_embedding = nn.Parameter(torch.zeros(1, self.query_len, embed_dim))
+            pre_fusion_blocks_list = []
+            for i in range(1):
+                pre_fusion_blocks_list.append(basic_block())
+            self.lang_modulation_pre_blocks = nn.ModuleList(pre_fusion_blocks_list)
 
         self._reset_parameters()
         self._freeze_parameters()
@@ -165,7 +169,7 @@ class VisionTransformer(nn.Module):
                 for param in self.blocks[i].parameters():
                     param.requires_grad = False
 
-    def _forward_with_reg_token(self, visu_src, ling_src, visu_mask, ling_mask):
+    def _forward_with_deep_prompt(self, visu_src, ling_src, visu_mask, ling_mask):
         batch_size = visu_src.shape[0]
 
         visu_src = self.patch_embed(visu_src)
@@ -202,9 +206,42 @@ class VisionTransformer(nn.Module):
 
         return reg_src
         
+    def _forward_with_shallow_prompt(self, visu_src, ling_src, visu_mask, ling_mask):
+        batch_size = visu_src.shape[0]
+
+        visu_src = self.patch_embed(visu_src)
+        visu_src = self.pos_drop(visu_src + self.pos_embed)
+        visu_src = visu_src.flatten(2).transpose(1, 2)
+        reg_src  = self.reg_token.expand(batch_size, -1, -1)
+
+        ling_mask = ling_mask.view(batch_size, 1, 1, -1).expand(-1, self.num_heads, -1, -1)
+        visu_mask = torch.zeros(batch_size, 1+visu_src.shape[1], dtype=visu_src.dtype, device=visu_src.device)
+        visu_mask = visu_mask.view(batch_size, 1, 1, -1).expand(-1, self.num_heads, -1, -1)
+        
+
+        for block in self.lang_modulation_pre_blocks:
+            ling_src = block(ling_src, ling_mask)
+        
+        src = torch.cat([reg_src, visu_src, ling_src], dim=1)
+        mask = torch.cat([visu_mask, ling_mask], dim=-1)
+        
+        for block in self.blocks:
+            src = block(src, mask)
+        
+        reg_src = src[:, 0, :]
+
+        if self.norm is not None:
+            reg_src = self.norm(reg_src)
+
+        reg_src = reg_src.squeeze(1)
+
+        return reg_src
+
     def forward(self, visu_src, text_src, visu_mask, text_mask):
-        if self.reg_out_type == 'reg_token':
-            return self._forward_with_reg_token(visu_src, text_src, visu_mask, text_mask)
+        if self.language_modulation == 'shallow_prompt':
+            return self._forward_with_shallow_prompt(visu_src, text_src, visu_mask, text_mask)
+        elif self.language_modulation == 'deep_prompt':
+            return self._forward_with_deep_prompt(visu_src, text_src, visu_mask, text_mask)
         else:
             raise ValueError('reg_out_type should be one of ["reg_token", "avg_out"]')
 
@@ -228,6 +265,7 @@ def build_visual_branch_prompt_fusion(args):
                               num_heads=num_heads, 
                               mlp_ratio=mlp_ratio, 
                               reg_out_type=args.reg_out_type,
+                              language_modulation=args.language_modulation,
                             #   use_block_v2=args.use_block_v2,
                               language_query_max_len=args.max_query_len,
                               num_modulation=args.num_modulation,

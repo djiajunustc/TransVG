@@ -15,7 +15,7 @@ class LViT(nn.Module):
 
         self.language_branch = build_language_branch(args)
 
-        if args.language_modulation == 'prompt_fusion':
+        if args.language_modulation in ['deep_prompt', 'shallow_prompt']:
             self.visual_branch = build_visual_branch_prompt_fusion(args)
         else:
             self.visual_branch = build_visual_branch(args)

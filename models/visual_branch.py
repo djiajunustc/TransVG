@@ -36,7 +36,54 @@ class AvgPoolingModulation(nn.Module):
         x = self.fc2(x)
 
         return x
+
+
+class MaxPoolingModulation(nn.Module):
+    
+    def __init__(self,
+                 dim,
+                 mlp_ratio=1,
+                 drop=0.1,
+                 act_layer=nn.GELU,
+                 norm_layer=nn.LayerNorm
+                 ):
+        super().__init__()
+        hidden_dim = int(dim * mlp_ratio)
         
+        self.fc1 = nn.Linear(dim, hidden_dim)
+        self.fc2 = nn.Linear(hidden_dim, dim)
+
+    def forward(self, x, x_mask):
+        x = self.fc1(x)
+        
+        x = torch.max(x, dim=1, keepdim=True)[0]
+        x = self.fc2(x)
+
+        return x
+
+
+class CLSTokenModulation(nn.Module):
+    
+    def __init__(self,
+                 dim,
+                 mlp_ratio=1,
+                 drop=0.1,
+                 act_layer=nn.GELU,
+                 norm_layer=nn.LayerNorm
+                 ):
+        super().__init__()
+        hidden_dim = int(dim * mlp_ratio)
+        
+        self.fc1 = nn.Linear(dim, hidden_dim)
+        self.fc2 = nn.Linear(hidden_dim, dim)
+
+    def forward(self, x, x_mask):
+        x = x[:, :1, :]
+        x = self.fc1(x)
+        x = self.fc2(x)
+
+        return x
+
 
 class Block(nn.Module):
 
@@ -66,7 +113,11 @@ class Block(nn.Module):
             if self.language_modulation == 'cross_attn':
                 self.lang_modulation = AttentionV2(dim, num_heads=num_heads, qkv_bias=qkv_bias, attn_drop=attn_drop, proj_drop=drop)
             elif self.language_modulation == 'avg_pooling':
-                self.lang_modulation = AvgPoolingModulation(dim=dim, mlp_ratio=mlp_ratio, act_layer=act_layer, norm_layer=norm_layer)
+                self.lang_modulation = AvgPoolingModulation(dim=dim, mlp_ratio=1, act_layer=act_layer, norm_layer=norm_layer)
+            elif self.language_modulation == 'max_pooling':
+                self.lang_modulation = MaxPoolingModulation(dim=dim, mlp_ratio=1, act_layer=act_layer, norm_layer=norm_layer)
+            elif self.language_modulation == 'cls_token':
+                self.lang_modulation = CLSTokenModulation(dim=dim, mlp_ratio=1, act_layer=act_layer, norm_layer=norm_layer)
             else:
                 raise ValueError('language_modulation can only be one of ["cross_attn", "avg_pooling"]')
 
@@ -80,6 +131,10 @@ class Block(nn.Module):
         if self.language_modulation == 'cross_attn':
             x = x + self.drop_path(self.lang_modulation(x, y, y, y_attn_mask))
         elif self.language_modulation == 'avg_pooling':
+            x = x + self.drop_path(self.lang_modulation(y, y_mask))
+        elif self.language_modulation == 'max_pooling':
+            x = x + self.drop_path(self.lang_modulation(y, y_mask))
+        elif self.language_modulation == 'cls_token':
             x = x + self.drop_path(self.lang_modulation(y, y_mask))
         
         x = x + self.drop_path(self.mlp(self.norm2(x)))
