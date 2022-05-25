@@ -206,8 +206,8 @@ class VisionTransformer(nn.Module):
         self.pos_embed = nn.Parameter(torch.zeros(1, embed_dim, self.embed_shape, self.embed_shape))
         self.pos_drop = nn.Dropout(p=drop_rate)
 
-        if self.reg_out_type == 'reg_token':
-            self.reg_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
+        # if self.reg_out_type == 'reg_token':
+        #     self.reg_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
             # nn.init.normal_(self.reg_token, std=0.02)
 
         # if use_block_v2:
@@ -268,13 +268,13 @@ class VisionTransformer(nn.Module):
                 for param in self.blocks[i].parameters():
                     param.requires_grad = False
 
-    def _forward_with_reg_token(self, visu_src, ling_src, visu_mask, ling_mask):
+    def _forward_with_reg_token(self, reg_src, visu_src, ling_src, visu_mask, ling_mask):
         batch_size = visu_src.shape[0]
 
         visu_src = self.patch_embed(visu_src)
         visu_src = self.pos_drop(visu_src + self.pos_embed)
         visu_src = visu_src.flatten(2).transpose(1, 2)
-        reg_src  = self.reg_token.expand(batch_size, -1, -1)
+        # reg_src  = self.reg_token.expand(batch_size, -1, -1)
 
         ling_attn_mask = ling_mask.view(batch_size, 1, 1, -1).expand(-1, self.num_heads, -1, -1)
         
@@ -356,9 +356,9 @@ class VisionTransformer(nn.Module):
         return reg_src
 
 
-    def forward(self, visu_src, text_src, visu_mask, text_mask):
+    def forward(self, reg_src, visu_src, text_src, visu_mask, text_mask):
         if self.reg_out_type == 'reg_token':
-            return self._forward_with_reg_token(visu_src, text_src, visu_mask, text_mask)
+            return self._forward_with_reg_token(reg_src, visu_src, text_src, visu_mask, text_mask)
         elif self.reg_out_type == 'avg_out':
             return self._forward_with_avg_out(visu_src, text_src, visu_mask, text_mask)
         else:

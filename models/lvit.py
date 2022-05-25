@@ -23,18 +23,23 @@ class LViT(nn.Module):
         embed_dim = self.visual_branch.embed_dim
         self.text_proj = nn.Linear(self.language_branch.num_channels, embed_dim)
 
+        self.reg_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
+
         self.prediction_head = MLP(self.visual_branch.num_channels, 256, 4, 3)
 
     def forward(self, img_data, text_data):
         visu_src, visu_mask = img_data.decompose()
         text_src, text_mask = text_data.decompose()
         
+        batch_size = visu_src.shape[0]
+        reg_src = self.reg_token.expand(batch_size, -1, -1)
+
         # Language branch
         text_src, text_mask = self.language_branch(text_src, text_mask)
         text_src = self.text_proj(text_src)
 
         # Language conditioned vision branch
-        reg_src = self.visual_branch(visu_src, text_src, visu_mask, text_mask)
+        reg_src = self.visual_branch(reg_src, visu_src, text_src, visu_mask, text_mask)
 
         # Prediction head
         pred_box = self.prediction_head(reg_src).sigmoid()

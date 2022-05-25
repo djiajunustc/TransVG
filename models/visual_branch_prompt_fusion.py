@@ -24,13 +24,12 @@ class PrePromptBlock(nn.Module):
         self.mlp = Mlp(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop)
         self.bias_embedding = nn.Parameter(torch.zeros(1, 1, dim))
         self.norm = norm_layer(dim)
-        self.relu = nn.GELU()
         self.fc_out = nn.Linear(dim, dim)
 
     def forward(self, x):
         x = x + self.bias_embedding
         x = x + self.mlp(self.norm(x))
-        x = self.relu(x)
+        # x = self.relu(x)
         x = self.fc_out(x)
         
         return x
@@ -132,8 +131,8 @@ class VisionTransformer(nn.Module):
         self.pos_embed = nn.Parameter(torch.zeros(1, embed_dim, self.embed_shape, self.embed_shape))
         self.pos_drop = nn.Dropout(p=drop_rate)
 
-        if self.reg_out_type == 'reg_token':
-            self.reg_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
+        # if self.reg_out_type == 'reg_token':
+        #     self.reg_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
             # nn.init.normal_(self.reg_token, std=0.02)
 
         _block = Block
@@ -162,14 +161,16 @@ class VisionTransformer(nn.Module):
         self.norm = norm_layer(embed_dim)
         
         if self.language_modulation == 'deep_prompt':
+            self.lang_modulation_bias = nn.Parameter(torch.zeros(num_modulation, 1, embed_dim))
             pre_fusion_blocks_list = []
             for i in range(num_modulation):
-                pre_fusion_blocks_list.append(PrePromptBlock(embed_dim))
+                pre_fusion_blocks_list.append(basic_block())
             self.lang_modulation_pre_blocks = nn.ModuleList(pre_fusion_blocks_list)
         elif self.language_modulation == 'shallow_prompt':
+            self.lang_modulation_bias = nn.Parameter(torch.zeros(1, 1, embed_dim))
             pre_fusion_blocks_list = []
             for i in range(1):
-                pre_fusion_blocks_list.append(PrePromptBlock(embed_dim))
+                pre_fusion_blocks_list.append(basic_block())
             self.lang_modulation_pre_blocks = nn.ModuleList(pre_fusion_blocks_list)
 
         self._reset_parameters()
@@ -193,13 +194,13 @@ class VisionTransformer(nn.Module):
                 for param in self.blocks[i].parameters():
                     param.requires_grad = False
 
-    def _forward_with_deep_prompt(self, visu_src, ling_src, visu_mask, ling_mask):
+    def _forward_with_deep_prompt(self, reg_src, visu_src, ling_src, visu_mask, ling_mask):
         batch_size = visu_src.shape[0]
 
         visu_src = self.patch_embed(visu_src)
         visu_src = self.pos_drop(visu_src + self.pos_embed)
         visu_src = visu_src.flatten(2).transpose(1, 2)
-        reg_src  = self.reg_token.expand(batch_size, -1, -1)
+        # reg_src  = self.reg_token.expand(batch_size, -1, -1)
 
         ling_mask = ling_mask.view(batch_size, 1, 1, -1).expand(-1, self.num_heads, -1, -1)
         visu_mask = torch.zeros(batch_size, 1+visu_src.shape[1], dtype=visu_src.dtype, device=visu_src.device)
@@ -212,8 +213,8 @@ class VisionTransformer(nn.Module):
             if i not in self.modulation_loc:
                 src = block(src, mask)
             else:
-                this_lang_src = ling_src
-                this_lang_src = self.lang_modulation_pre_blocks[count_modulation](this_lang_src)
+                this_lang_src = ling_src + self.lang_modulation_bias[count_modulation][None, :, :]
+                this_lang_src = self.lang_modulation_pre_blocks[count_modulation](this_lang_src, ling_mask)
                 this_src = torch.cat([src, this_lang_src], dim=1)
                 this_mask = torch.cat([mask, ling_mask], dim=-1)
                 this_src = block(this_src, this_mask)
@@ -229,21 +230,21 @@ class VisionTransformer(nn.Module):
 
         return reg_src
         
-    def _forward_with_shallow_prompt(self, visu_src, ling_src, visu_mask, ling_mask):
+    def _forward_with_shallow_prompt(self, reg_src, visu_src, ling_src, visu_mask, ling_mask):
         batch_size = visu_src.shape[0]
 
         visu_src = self.patch_embed(visu_src)
         visu_src = self.pos_drop(visu_src + self.pos_embed)
         visu_src = visu_src.flatten(2).transpose(1, 2)
-        reg_src  = self.reg_token.expand(batch_size, -1, -1)
+        # reg_src  = self.reg_token.expand(batch_size, -1, -1)
 
         ling_mask = ling_mask.view(batch_size, 1, 1, -1).expand(-1, self.num_heads, -1, -1)
         visu_mask = torch.zeros(batch_size, 1+visu_src.shape[1], dtype=visu_src.dtype, device=visu_src.device)
         visu_mask = visu_mask.view(batch_size, 1, 1, -1).expand(-1, self.num_heads, -1, -1)
         
-        # ling_src = ling_src 
+        ling_src = ling_src + self.lang_modulation_bias
         for block in self.lang_modulation_pre_blocks:
-            ling_src = block(ling_src)
+            ling_src = block(ling_src, ling_mask)
         
         src = torch.cat([reg_src, visu_src, ling_src], dim=1)
         mask = torch.cat([visu_mask, ling_mask], dim=-1)
@@ -260,11 +261,11 @@ class VisionTransformer(nn.Module):
 
         return reg_src
 
-    def forward(self, visu_src, text_src, visu_mask, text_mask):
+    def forward(self, reg_src, visu_src, text_src, visu_mask, text_mask):
         if self.language_modulation == 'shallow_prompt':
-            return self._forward_with_shallow_prompt(visu_src, text_src, visu_mask, text_mask)
+            return self._forward_with_shallow_prompt(reg_src, visu_src, text_src, visu_mask, text_mask)
         elif self.language_modulation == 'deep_prompt':
-            return self._forward_with_deep_prompt(visu_src, text_src, visu_mask, text_mask)
+            return self._forward_with_deep_prompt(reg_src, visu_src, text_src, visu_mask, text_mask)
         else:
             raise ValueError('reg_out_type should be one of ["reg_token", "avg_out"]')
 
