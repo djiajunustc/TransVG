@@ -1,20 +1,24 @@
 export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 
-# ReferItGame
-python -m torch.distributed.launch --nproc_per_node=8 --use_env train.py --batch_size 8 --lr_bert 0.00001 --aug_crop --aug_scale --aug_translate --backbone resnet50 --detr_model ./checkpoints/detr-r50-referit.pth --bert_enc_num 12 --detr_enc_num 6 --dataset referit --max_query_len 20 --output_dir outputs/referit_r50
 
+# -------------------------  RefCOCOg u-split --------------------------
 
-# # RefCOCO
-# python -m torch.distributed.launch --nproc_per_node=8 --use_env train.py --batch_size 8 --lr_bert 0.00001 --aug_crop --aug_scale --aug_translate --backbone resnet50 --detr_model ./checkpoints/detr-r50-unc.pth --bert_enc_num 12 --detr_enc_num 6 --dataset unc --max_query_len 20 --output_dir outputs/refcoco_r50 
-
-
-# # RefCOCO+
-# python -m torch.distributed.launch --nproc_per_node=8 --use_env train.py --batch_size 8 --lr_bert 0.00001 --aug_crop --aug_scale --aug_translate --backbone resnet50 --detr_model ./checkpoints/detr-r50-unc.pth --bert_enc_num 12 --detr_enc_num 6 --dataset unc+ --max_query_len 20 --output_dir outputs/refcoco_plus_r50 --epochs 180 --lr_drop 120
-
-
-# # RefCOCOg g-split
-# python -m torch.distributed.launch --nproc_per_node=8 --use_env train.py --batch_size 8 --lr_bert 0.00001 --aug_scale --aug_translate --aug_crop --backbone resnet50 --detr_model ./checkpoints/detr-r50-gref.pth --bert_enc_num 12 --detr_enc_num 6 --dataset gref --max_query_len 40 --output_dir outputs/refcocog_gsplit_r50
-
-
-# # RefCOCOg umd-split
-# python -m torch.distributed.launch --nproc_per_node=8 --use_env train.py --batch_size 8 --lr_bert 0.00001 --aug_scale --aug_translate --aug_crop --backbone resnet50 --detr_model ./checkpoints/detr-r50-gref.pth --bert_enc_num 12 --detr_enc_num 6 --dataset gref_umd --max_query_len 40 --output_dir outputs/refcocog_usplit_r50
+# language-adapter
+python -m torch.distributed.launch --nproc_per_node=8 --use_env \
+train.py \
+--batch_size 4 \
+--vit_model tiny \
+--bert_model bert-base-uncased \
+--lr 0.0001 \
+--lr_vision 0.00001 \
+--lr_language 0.00001 \
+--dataset gref_umd \
+--aug_scale --aug_crop --aug_translate \
+--visual_pretrained ../ViTDet-Models/vitdet_tiny_for_lvit_640_global_12.pth \
+--max_query_len 40 \
+--epochs 60 --lr_drop 45 \
+--separate_qkv \
+--reg_out_type reg_token \
+--language_modulation cross_attn \
+--without_visual_mask \
+--output_dir outputs/gref_umd_transvg_plusplus_tiny_cross_attn_lr_1e-4

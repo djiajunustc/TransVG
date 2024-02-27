@@ -1,21 +1,17 @@
 export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 
 
-# ReferItGame
-python -m torch.distributed.launch --nproc_per_node=8 --use_env eval.py --batch_size 32 --num_workers 4 --bert_enc_num 12 --detr_enc_num 6 --backbone resnet50 --dataset referit --max_query_len 20 --eval_set test --eval_model ../released_models/TransVG_referit.pth --output_dir ./outputs/referit_r50
 
-
-# # RefCOCO
-# python -m torch.distributed.launch --nproc_per_node=8 --use_env eval.py --batch_size 32 --num_workers 4 --bert_enc_num 12 --detr_enc_num 6 --backbone resnet50 --dataset unc --max_query_len 20 --eval_set testA --eval_model ../released_models/TransVG_unc.pth --output_dir ./outputs/refcoco_r50
-
-
-# # RefCOCO+
-# python -m torch.distributed.launch --nproc_per_node=8 --use_env eval.py --batch_size 32 --num_workers 4 --bert_enc_num 12 --detr_enc_num 6 --backbone resnet50 --dataset unc+ --max_query_len 20 --eval_set testA --eval_model ../released_models/TransVG_unc+.pth --output_dir ./outputs/refcoco_plus_r50
-
-
-# # RefCOCOg g-split
-# python -m torch.distributed.launch --nproc_per_node=8 --use_env eval.py --batch_size 32 --num_workers 4 --bert_enc_num 12 --detr_enc_num 6 --backbone resnet50 --dataset gref --max_query_len 40 --eval_set val --eval_model ../released_models/TransVG_gref.pth --output_dir ./outputs/refcocog_gsplit_r50
-
-
-# # RefCOCOg u-split
-# python -m torch.distributed.launch --nproc_per_node=8 --use_env eval.py --batch_size 32 --num_workers 4 --bert_enc_num 12 --detr_enc_num 6 --backbone resnet50 --dataset gref_umd --max_query_len 40 --eval_set test --eval_model ../released_models/TransVG_gref_umd.pth --output_dir ./outputs/refcocog_usplit_r50
+python -m torch.distributed.launch --nproc_per_node=4 --use_env --master_port 47770 \
+eval.py \
+--batch_size 16 \
+--vit_model tiny \
+--bert_model bert-base-uncased \
+--max_query_len 40 \
+--dataset gref_umd \
+--eval_set test \
+--reg_out_type reg_token \
+--language_modulation cross_attn \
+--without_visual_mask \
+--eval_model outputs/gref_umd_transvg_plusplus_tiny_cross_attn_lr_1e-4/best_checkpoint.pth \
+--output_dir outputs/gref_umd_transvg_plusplus_tiny_cross_attn_lr_1e-4
