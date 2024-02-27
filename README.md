@@ -67,8 +67,7 @@ We have provided an example in train.sh and test.sh
     ```
 
     We recommend to set --max_query_len 40 for RefCOCOg, and --max_query_len 20 for other datasets. 
-    
-    We recommend to set --epochs 180 (--lr_drop 120 acoordingly) for RefCOCO+, and --epochs 90 (--lr_drop 60 acoordingly) for other datasets. 
+
 
 2.  Evaluation
     ```
